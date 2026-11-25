@@ -1,22 +1,21 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 The RadioFoundry Authors
-# Refreshes the Builder tab's data snapshots (site/static/js/codeplug/builder/data/)
-# and commits them.
 #
-# Brandmeister sends no CORS headers, so a page cannot read its talkgroup list or
-# its repeaters, and HearHam's dump is 10 MB. The snapshots are therefore
-# committed, and this workflow keeps them current.
+# Refreshes the Builder tab's data snapshots (site/static/js/codeplug/builder/data) and commits them.
 #
-# The per-repeater static talkgroups are one request per repeater and Brandmeister
-# throttles them with a 429 and a Retry-After of a minute or more, so a full pass
-# takes many hours. Every answer is cached under build/builder-cache/, which this
-# workflow keeps between runs (actions/cache) and which the script resumes from;
-# TALKGROUP_MINUTES caps a run so it never approaches the job's time limit.
+# Brandmeister sends no CORS headers, so the page cannot read its talkgroups or its repeaters, and HearHam's dump is
+# 10 MB: the lists ship as committed modules (site/rfoundrysite/builder_data.py). This workflow keeps them current.
+#
+# The per-repeater static talkgroups are one request each and Brandmeister answers 429 with a Retry-After of a minute
+# or more, so a full pass takes hours. Every answer is kept in build/builder-cache (a cache entry here), a run resumes
+# from it, and --talkgroup-budget caps what one run asks for, so the job stays inside its time limit and the next
+# Monday continues. A repeater with no list yet is left out of the snapshot, and the page falls back to that
+# repeater's national talkgroup.
 name: builder-data
 
 on:
   schedule:
-    - cron: "17 3 * * 1"	# Mondays, 03:17 UTC
+    - cron: "17 3 * * 1"    # Mondays, 03:17 UTC
   workflow_dispatch:
     inputs:
       budget:
@@ -32,32 +31,20 @@ concurrency:
 
 jobs:
   refresh:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
-          # the data modules are the only thing this job writes
-          sparse-checkout: |
-            site
-            boards
-            config
-            platform
-            boot
-            docs
-            tools
-            Makefile
-            LICENSE
-            AUTHORS
-            CONTRIBUTORS
-          sparse-checkout-cone-mode: false
+          persist-credentials: true   # this job commits the snapshots back
+          submodules: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0   # v7.1.0
         with:
           python-version: "3.12"
 
-      - name: Cache the upstream answers
-        uses: actions/cache@v4
+      - name: Restore the upstream answers
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6.1.0
         with:
           path: build/builder-cache
           key: builder-cache-${{ github.run_id }}
@@ -68,12 +55,20 @@ jobs:
           BUDGET: ${{ github.event.inputs.budget || '600' }}
         run: python3 site/rfoundrysite/builder_data.py --talkgroup-budget "$BUDGET"
 
-      - name: Check the modules load
+      - name: Keep the answers for the next run
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6.1.0
+        with:
+          path: build/builder-cache
+          key: builder-cache-${{ github.run_id }}
+
+      - name: The modules load
         run: |
+          set -eu
           for f in site/static/js/codeplug/builder/data/*.js; do node --check "$f"; done
 
-      - name: Commit if anything changed
+      - name: Commit when the data changed
         run: |
+          set -eu
           if git diff --quiet -- site/static/js/codeplug/builder/data; then
             echo "no change"
             exit 0
