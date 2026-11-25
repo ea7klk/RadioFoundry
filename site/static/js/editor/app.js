@@ -29,7 +29,7 @@ import * as diag from "../diag.js";
 import { initReporting, reportedLine } from "../report.js";
 import { updateFor } from "../flasher/version.js";
 
-const TABS = ["radio", "channels", "zones", "contacts", "rxLists", "dtmfContacts", "aprs", "systems", "iddb", "problems"];
+const TABS = ["radio", "builder", "channels", "zones", "contacts", "rxLists", "dtmfContacts", "aprs", "systems", "iddb", "problems"];
 const TABLE_MAX = { channels: LIMITS.channels, zones: LIMITS.zones, contacts: LIMITS.contacts, rxLists: LIMITS.rxLists, dtmfContacts: LIMITS.dtmfContacts, aprs: LIMITS.aprs };
 
 const S = {
@@ -181,6 +181,7 @@ function renderToolbar(errors) {
 function renderView(p) {
 	const tab = S.tab;
 	if (tab === "radio") return view.replaceChildren(radioTab());
+	if (tab === "builder") return view.replaceChildren(extensions.builderTab(api()));
 	if (tab === "iddb") return view.replaceChildren(extensions.iddbTab(api()));
 	if (tab === "systems") return view.replaceChildren(systemsTab(api(), features()));
 	if (tab === "problems") return view.replaceChildren(problemsTab(p));

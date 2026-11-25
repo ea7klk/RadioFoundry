@@ -17,6 +17,10 @@ export const extensions = {
 		for (const p of parts) if (await p.openText?.(file, name, api)) return true;
 		return false;
 	},
+	builderTab(api) {
+		const p = parts.find((x) => x.builderTab);
+		return p ? p.builderTab(api) : null;
+	},
 	iddbTab(api) {
 		const p = parts.find((x) => x.iddbTab);
 		if (p) return p.iddbTab(api);

@@ -23,6 +23,7 @@ The chapters below name the command line tools as alternatives.
 2. [Installing](02-installing.md): the web installer first, then the advanced rfoundry command line; updating, backups, going back
 3. [First boot](03-first-boot.md): built-in channels, the first checks
 4. [Programming the radio](04-programming.md): the Codeplug Editor (P25 and NXDN channels, trunked systems), qdmr, RadioID contacts
+   - [Building a codeplug from your location](builder.md): the Builder tab, from a locator, city or map point to channels, contacts and zones
 
 ### Use the radio
 
