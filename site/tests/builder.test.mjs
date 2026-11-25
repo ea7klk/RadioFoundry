@@ -500,3 +500,30 @@ test("the Builder's tables update in place, and keep their scroll on a rebuild",
 	// and three tables use it
 	assert.equal((partSource.match(/syncRows\(P\.\w+Wrap,/g) || []).length, 3, "the three lists");
 });
+
+// --- country names ----------------------------------------------------------
+
+test("a country is named in full, in the page's language", () => {
+	assert.equal(packs.countryName("ES", "en"), "Spain");
+	assert.equal(packs.countryName("ES", "es"), "España");
+	assert.equal(packs.countryName("ES", "it"), "Spagna");
+	assert.equal(packs.countryName("ES", "zh"), "西班牙");
+	assert.equal(packs.countryName("DE", "es"), "Alemania");
+	assert.equal(packs.countryName("es", "es"), "España", "a lower case code is the same country");
+});
+
+test("a code no one can name gives nothing, not a placeholder", () => {
+	// Intl answers "Unknown Region" for ZZ; that must not reach the page
+	assert.equal(packs.countryName("ZZ", "es"), "");
+	assert.equal(packs.countryName("", "es"), "");
+	assert.equal(packs.countryName(null, "es"), "");
+	assert.equal(packs.countryName("E1", "es"), "");
+});
+
+test("every country the Builder offers has a name in every language", () => {
+	for (const [cc] of packs.COUNTRIES) {
+		for (const locale of ["en", "es", "it", "zh"]) {
+			assert.ok(packs.countryName(cc, locale), `${cc} in ${locale}`);
+		}
+	}
+});

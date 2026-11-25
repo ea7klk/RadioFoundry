@@ -26,6 +26,7 @@ import {
 import { LIMITS } from "../codeplug/records.js";
 import * as geo from "../codeplug/builder/geo.js";
 import * as packs from "../codeplug/builder/packs.js";
+import { LANG } from "../i18n.js";
 import * as dmr from "../codeplug/builder/dmr.js";
 import * as analog from "../codeplug/builder/analog.js";
 import { validate } from "../codeplug/model.js";
@@ -82,6 +83,17 @@ const B = {
 };
 
 const save = () => store(PREFS, B.prefs);
+
+// A name from the catalogue, or the English the data carries when the catalog
+// has no key for it. t() answers with the key itself when it cannot translate.
+const label = (key, english) => {
+	const text = B.api?.t(key);
+	return !text || text === key ? english : text;
+};
+
+// A country's full name in the page's language, from the two-letter code the
+// data carries; a code no one can name shows as the code.
+const place = (cc) => packs.countryName(cc, LANG) || cc;
 
 // A choice changed: keep it, then redraw. Module level, because update() and
 // the handlers both call it.
@@ -462,12 +474,12 @@ function fillCountrySelect() {
 	const current = B.prefs.country;
 	P.country.replaceChildren(
 		h("option", { value: "" }, B.api.t("editor.builder.other_country")),
-		...["R1", "R2", "R3"].map((region) => h("optgroup", { label: packs.REGIONS[region].label },
+		...["R1", "R2", "R3"].map((region) => h("optgroup", { label: label(`editor.builder.region_${region.toLowerCase()}`, packs.REGIONS[region].label) },
 			...packs.COUNTRIES.filter(([, , ccRegion]) => ccRegion === region)
-				.map(([cc, name]) => h("option", { value: cc }, `${name} (${cc})`)))));
+				.map(([cc]) => h("option", { value: cc }, `${packs.countryName(cc, LANG)} (${cc})`)))));
 	P.country.value = packs.COUNTRY_BY_CC.has(current) ? current : "";
 	P.region.replaceChildren(...Object.entries(packs.REGIONS).map(([id, region]) =>
-		h("option", { value: id }, region.label)));
+		h("option", { value: id }, label(`editor.builder.region_${id.toLowerCase()}`, region.label))));
 	P.region.value = B.prefs.region;
 }
 
@@ -668,7 +680,7 @@ function update() {
 	// talkgroups
 	const all = B.talkgroups || [];
 	P.tgContinent.replaceChildren(h("option", { value: "all" }, t("editor.builder.all_continents")),
-		...dmr.CONTINENTS.map(([id, label]) => h("option", { value: id }, label)));
+		...dmr.CONTINENTS.map(([id, english]) => h("option", { value: id }, label(`editor.builder.continent.${id}`, english))));
 	P.tgContinent.value = B.prefs.tgContinent;
 	const countries = new Map();
 	for (const row of all) {
@@ -677,7 +689,7 @@ function update() {
 	}
 	P.tgCountry.replaceChildren(h("option", { value: "" }, t("editor.builder.all_countries")),
 		...[...countries.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-			.map(([cc, n]) => h("option", { value: cc }, `${cc} (${n})`)));
+			.map(([cc, n]) => h("option", { value: cc }, `${place(cc)} (${n})`)));
 	P.tgCountry.value = countries.has(B.prefs.tgCountry) ? B.prefs.tgCountry : "";
 
 	const visible = visibleTalkgroups();
@@ -687,16 +699,16 @@ function update() {
 	const tgIds = [];
 	for (const row of shown) {
 		const [tgId, name, , cc] = row;
-		const place = cc || dmr.CONTINENT_LABEL[row[2]] || "";
+		const where = cc ? place(cc) : label(`editor.builder.continent.${row[2]}`, dmr.CONTINENT_LABEL[row[2]] || "");
 		tgIds.push(tgId);
-		tgSig.push(`${tgId}|${name}|${place}`);
+		tgSig.push(`${tgId}|${name}|${where}`);
 		tgRows.push(h("tr", {},
 			h("td", { class: "grid-check" }, h("input", {
 				type: "checkbox", onchange: () => tickTalkgroup(tgId, name),
 			})),
 			h("td", { class: "c-num" }, String(tgId)),
 			h("td", {}, name),
-			h("td", {}, place)));
+			h("td", {}, where)));
 	}
 	syncRows(P.tgWrap, P.tgRows, tgSig.join("\n"), tgRows, (i) => hasSource(model, `tg:${tgIds[i]}`));
 	const chosenShown = shown.filter((row) => hasSource(model, `tg:${row[0]}`));

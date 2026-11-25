@@ -2519,5 +2519,16 @@
  "editor.builder.note_zones": "The Builder groups what it adds into zones by kind — DMR, DMR SIMPLEX, DMR ACCESS, ANALOG, STANDARD, APRS — and splits a group past the radio's 80 channels per zone. That is a starting point, not a plan: check each zone, drop the channels you will never use, move the ones you use together into one zone, and reorder them so the ones you reach for come first. A zone the radio scans is worth more than a long list you scroll in the field.",
  "editor.builder.band_all": "All bands",
  "editor.builder.band_vhf": "VHF only",
- "editor.builder.band_uhf": "UHF only"
+ "editor.builder.band_uhf": "UHF only",
+ "editor.builder.continent.worldwide": "Worldwide",
+ "editor.builder.continent.europe": "Europe",
+ "editor.builder.continent.north-america": "North America and the Caribbean",
+ "editor.builder.continent.south-america": "South America",
+ "editor.builder.continent.asia": "Asia and the Middle East",
+ "editor.builder.continent.africa": "Africa",
+ "editor.builder.continent.oceania": "Oceania",
+ "editor.builder.continent.other": "Other",
+ "editor.builder.region_r1": "IARU Region 1",
+ "editor.builder.region_r2": "IARU Region 2",
+ "editor.builder.region_r3": "IARU Region 3"
 }

@@ -2519,5 +2519,16 @@
  "editor.builder.note_zones": "构建器按类型把加入的内容分到各分区——DMR、DMR SIMPLEX、DMR ACCESS、ANALOG、STANDARD、APRS——超过电台每分区 80 个信道时再拆开。这只是起点，不是方案：逐个检查分区，删掉不会用到的信道，把常一起使用的移进同一分区，并重新排序让常用的排在前。电台能扫描的分区，比在外场要翻找的长列表有用得多。",
  "editor.builder.band_all": "全部频段",
  "editor.builder.band_vhf": "仅 VHF",
- "editor.builder.band_uhf": "仅 UHF"
+ "editor.builder.band_uhf": "仅 UHF",
+ "editor.builder.continent.worldwide": "全球",
+ "editor.builder.continent.europe": "欧洲",
+ "editor.builder.continent.north-america": "北美与加勒比",
+ "editor.builder.continent.south-america": "南美",
+ "editor.builder.continent.asia": "亚洲与中东",
+ "editor.builder.continent.africa": "非洲",
+ "editor.builder.continent.oceania": "大洋洲",
+ "editor.builder.continent.other": "其他",
+ "editor.builder.region_r1": "IARU 第 1 区",
+ "editor.builder.region_r2": "IARU 第 2 区",
+ "editor.builder.region_r3": "IARU 第 3 区"
 }

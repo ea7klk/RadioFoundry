@@ -2519,5 +2519,16 @@
  "editor.builder.note_zones": "El Constructor agrupa lo que añade en zonas por tipo — DMR, DMR SIMPLEX, DMR ACCESS, ANALOG, STANDARD, APRS — y parte un grupo cuando pasa de 80 canales por zona, el límite de la radio. Es un punto de partida, no un plan: revisa cada zona, quita los canales que no vas a usar, junta en una sola los que usas juntos y reordénalos para que los de siempre queden primero. Una zona que la radio explora vale más que una lista larga por la que desplazarse en el campo.",
  "editor.builder.band_all": "Todas las bandas",
  "editor.builder.band_vhf": "Solo VHF",
- "editor.builder.band_uhf": "Solo UHF"
+ "editor.builder.band_uhf": "Solo UHF",
+ "editor.builder.continent.worldwide": "Mundial",
+ "editor.builder.continent.europe": "Europa",
+ "editor.builder.continent.north-america": "Norteamérica y el Caribe",
+ "editor.builder.continent.south-america": "Sudamérica",
+ "editor.builder.continent.asia": "Asia y Oriente Medio",
+ "editor.builder.continent.africa": "África",
+ "editor.builder.continent.oceania": "Oceanía",
+ "editor.builder.continent.other": "Otros",
+ "editor.builder.region_r1": "Región 1 de la IARU",
+ "editor.builder.region_r2": "Región 2 de la IARU",
+ "editor.builder.region_r3": "Región 3 de la IARU"
 }

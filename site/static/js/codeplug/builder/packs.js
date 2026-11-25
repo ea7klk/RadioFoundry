@@ -72,6 +72,46 @@ export const COUNTRIES = [
 
 export const COUNTRY_BY_CC = new Map(COUNTRIES.map(([cc, name, region]) => [cc, { cc, name, region }]));
 
+// A country's name in the reader's language. Intl carries the names, so there is
+// no table to translate and keep in step: "ES" is Spain, España, Spagna or
+// 西班牙 depending on the page's language. A code Intl cannot name falls back to
+// the English name in COUNTRIES, then to the code itself.
+const NAMES = new Map();
+
+function regionNames(locale) {
+	if (!NAMES.has(locale)) {
+		let entry = { names: null, unknown: null };
+		try {
+			const names = new Intl.DisplayNames([locale], { type: "region" });
+			// what this engine says for a code that is not a country, so a code it
+			// cannot name is told apart from one it names ("Unknown Region" is not
+			// an answer worth showing)
+			entry = { names, unknown: names.of("ZZ") };
+		} catch (error) {
+			// an engine without Intl.DisplayNames, or a locale it rejects
+		}
+		NAMES.set(locale, entry);
+	}
+	return NAMES.get(locale);
+}
+
+// The name, or "" when neither Intl nor the English table knows the code: the
+// caller decides what to show instead (the code, or the continent).
+export function countryName(cc, locale = "en") {
+	const code = String(cc ?? "").trim().toUpperCase();
+	if (!/^[A-Z]{2}$/.test(code)) return "";
+	const { names, unknown } = regionNames(String(locale || "en"));
+	if (names) {
+		try {
+			const name = names.of(code);
+			if (name && name !== code && name !== unknown) return name;
+		} catch (error) {
+			// an unknown code: some engines throw rather than answer with the code
+		}
+	}
+	return COUNTRY_BY_CC.get(code)?.name || "";
+}
+
 export function regionForCountry(cc) {
 	return COUNTRY_BY_CC.get(String(cc || "").toUpperCase())?.region || "R1";
 }
