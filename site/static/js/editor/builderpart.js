@@ -402,13 +402,13 @@ function build(api) {
 			h("div", { class: "rid-row" },
 				field(t("editor.builder.radius"), P.dmrRadius), P.dmrRadiusOut),
 			P.dmrStatus,
-			h("div", { class: "table-wrap ed-builder-table" },
+			(P.dmrWrap = h("div", { class: "table-wrap ed-builder-table" },
 				h("table", { class: "grid" },
 					h("thead", {}, h("tr", {},
 						h("th", { class: "grid-check" }, ""), h("th", {}, t("editor.builder.col_call")),
 						h("th", {}, t("editor.builder.col_dmx")), h("th", {}, t("editor.builder.col_place")),
 						h("th", {}, t("editor.builder.col_tg")))),
-					P.dmrRows)),
+					P.dmrRows))),
 			h("label", { class: "rid-check" }, P.fallback, h("span", {}, t("editor.builder.fallback"))),
 			h("p", { class: "small muted" }, t("editor.builder.s3_note")),
 			P.snapshotNote),
@@ -417,25 +417,25 @@ function build(api) {
 				field(t("editor.builder.country"), P.tgCountry)),
 			h("div", { class: "rid-row" }, P.tgSearch, P.tgCount),
 			P.tgStatus,
-			h("div", { class: "table-wrap ed-builder-table" },
+			(P.tgWrap = h("div", { class: "table-wrap ed-builder-table" },
 				h("table", { class: "grid" },
 					h("thead", {}, h("tr", {},
 						h("th", { class: "grid-check" }, P.tgAll), h("th", {}, t("editor.builder.col_tg_id")),
 						h("th", {}, t("editor.builder.col_name")), h("th", {}, t("editor.builder.col_country")))),
-					P.tgRows)),
+					P.tgRows))),
 			P.tgChips,
 			h("p", { class: "small muted" }, t("editor.builder.s4_note"))),
 		step(5, t("editor.builder.s5"),
 			h("div", { class: "rid-row" }, field(t("editor.builder.band"), P.band),
 				field(t("editor.builder.radius"), P.analogRadius), P.analogRadiusOut),
 			P.analogStatus,
-			h("div", { class: "table-wrap ed-builder-table" },
+			(P.analogWrap = h("div", { class: "table-wrap ed-builder-table" },
 				h("table", { class: "grid" },
 					h("thead", {}, h("tr", {},
 						h("th", { class: "grid-check" }, ""), h("th", {}, t("editor.builder.col_call")),
 						h("th", {}, t("editor.builder.col_rx")), h("th", {}, t("editor.builder.col_tone")),
 						h("th", {}, t("editor.builder.col_place")), h("th", {}, t("editor.builder.col_source")))),
-					P.analogRows)),
+					P.analogRows))),
 			h("div", { class: "rid-row" },
 				h("label", { class: "rid-field" }, h("span", {}, t("editor.builder.file")), P.filePicker)),
 			P.fileOutput,
@@ -557,6 +557,28 @@ function cacheGeocode(query, results) {
 
 const analogKey = (repeater) => `${repeater.source || "h"}:${repeater.callsign}:${repeater.downlink_mhz}:${repeater.uplink_mhz}`;
 
+// A table's rows are rebuilt only when what they show has changed. A tick
+// changes one checkbox and nothing else, so rebuilding would throw the reader
+// back to the top of the list and drop the focus they just used; the tick is
+// applied in place instead. When a rebuild is needed, the scroll position is
+// kept, so the list stays where the reader left it either way.
+function syncRows(wrap, tbody, signature, rows, isOn) {
+	if (tbody.dataset.sig !== signature || tbody.children.length !== rows.length) {
+		const top = wrap.scrollTop;
+		tbody.replaceChildren(...rows);
+		tbody.dataset.sig = signature;
+		wrap.scrollTop = top;
+	}
+	// Fresh rows are built checked-off; both paths take their state from the model
+	for (let i = 0; i < tbody.children.length; i++) {
+		const on = Boolean(isOn(i));
+		const tr = tbody.children[i];
+		tr.classList.toggle("selected", on);
+		const box = tr.querySelector("input[type=checkbox]");
+		if (box && box.checked !== on) box.checked = on;
+	}
+}
+
 // Case and accents folded, so "malaga" finds "Provincial Málaga"
 const foldText = (text) => String(text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
@@ -604,7 +626,9 @@ function update() {
 	P.packsNote.textContent = aprsPack ? t("editor.builder.aprs_note") : t("editor.builder.aprs_note_off");
 
 	// DMR repeaters
-	const dmrRows = [];
+	let dmrRows = [];
+	let dmrSig = "";
+	const dmrIds = [];
 	if (location && B.dmrRepeaters) {
 		const near = B.dmrRepeaters
 			.filter((repeater) => repeater.lat !== null && repeater.lon !== null)
@@ -612,6 +636,7 @@ function update() {
 			.filter((repeater) => repeater.km <= B.prefs.radius)
 			.sort((a, b) => a.km - b.km)
 			.slice(0, 300);
+		const sig = [];
 		for (const repeater of near) {
 			const own = repeaterTalkgroups(repeater);
 			const first = own[0];
@@ -620,24 +645,25 @@ function update() {
 					? t("editor.builder.tg_national", { tg: first.tg, name: first.name })
 					: `${first.tg}${first.slot ? ` · TS${first.slot}` : ""}`) + (own.length > 1 ? ` +${own.length - 1}` : "")
 				: (B.prefs.options.fallbackTg ? t("editor.builder.tg_fallback") : "—");
-			dmrRows.push(h("tr", { class: hasSource(model, `dmr:${repeater.id}`) ? "selected" : "" },
-				h("td", { class: "grid-check" }, h("input", {
-					type: "checkbox",
-					checked: hasSource(model, `dmr:${repeater.id}`),
-					onchange: () => tickRepeater(repeater),
-				})),
+			const freqs = `${geo.formatMHz(repeater.downlink_mhz * 1e6)} / ${geo.formatMHz(repeater.uplink_mhz * 1e6)}`;
+			const place = `${repeater.city || "—"} · ${geo.formatKm(repeater.km)}`;
+			sig.push(`${repeater.id}|${repeater.callsign}|${freqs}|${place}|${tgText}`);
+			dmrRows.push(h("tr", {},
+				h("td", { class: "grid-check" }, h("input", { type: "checkbox", onchange: () => tickRepeater(repeater) })),
 				h("td", {}, repeater.callsign),
-				h("td", { class: "c-num" }, `${geo.formatMHz(repeater.downlink_mhz * 1e6)} / ${geo.formatMHz(repeater.uplink_mhz * 1e6)}`),
-				h("td", {}, `${repeater.city || "—"} · ${geo.formatKm(repeater.km)}`),
+				h("td", { class: "c-num" }, freqs),
+				h("td", {}, place),
 				h("td", {}, tgText)));
 		}
+		dmrSig = sig.join("\n");
+		for (const repeater of near) dmrIds.push(repeater.id);
 		P.dmrStatus.textContent = near.length
 			? t("editor.builder.dmr_found", { n: near.length, km: B.prefs.radius })
 			: t("editor.builder.none_found");
 	} else {
 		P.dmrStatus.textContent = t("editor.builder.need_location");
 	}
-	P.dmrRows.replaceChildren(...dmrRows);
+	syncRows(P.dmrWrap, P.dmrRows, dmrSig, dmrRows, (i) => hasSource(model, `dmr:${dmrIds[i]}`));
 
 	// talkgroups
 	const all = B.talkgroups || [];
@@ -656,17 +682,23 @@ function update() {
 
 	const visible = visibleTalkgroups();
 	const shown = visible.slice(0, 250);
-	P.tgRows.replaceChildren(...shown.map((row) => {
+	const tgRows = [];
+	const tgSig = [];
+	const tgIds = [];
+	for (const row of shown) {
 		const [tgId, name, , cc] = row;
-		const chosen = hasSource(model, `tg:${tgId}`);
-		return h("tr", { class: chosen ? "selected" : "" },
+		const place = cc || dmr.CONTINENT_LABEL[row[2]] || "";
+		tgIds.push(tgId);
+		tgSig.push(`${tgId}|${name}|${place}`);
+		tgRows.push(h("tr", {},
 			h("td", { class: "grid-check" }, h("input", {
-				type: "checkbox", checked: chosen, onchange: () => tickTalkgroup(tgId, name),
+				type: "checkbox", onchange: () => tickTalkgroup(tgId, name),
 			})),
 			h("td", { class: "c-num" }, String(tgId)),
 			h("td", {}, name),
-			h("td", {}, cc || dmr.CONTINENT_LABEL[row[2]] || ""));
-	}));
+			h("td", {}, place)));
+	}
+	syncRows(P.tgWrap, P.tgRows, tgSig.join("\n"), tgRows, (i) => hasSource(model, `tg:${tgIds[i]}`));
 	const chosenShown = shown.filter((row) => hasSource(model, `tg:${row[0]}`));
 	P.tgAll.checked = shown.length > 0 && chosenShown.length === shown.length;
 	P.tgAll.indeterminate = chosenShown.length > 0 && chosenShown.length < shown.length;
@@ -685,19 +717,25 @@ function update() {
 	// analog repeaters
 	const pool = [...(B.analogRepeaters || []), ...B.file];
 	const analogRows = [];
+	const analogSig = [];
+	const analogKeys = [];
 	if (location) {
 		const near = analog.nearby(pool, location.lat, location.lon, B.prefs.radius, { band: B.prefs.band, limit: 300 });
 		for (const repeater of near) {
 			const key = `analog:${analogKey(repeater)}`;
-			analogRows.push(h("tr", { class: hasSource(model, key) ? "selected" : "" },
-				h("td", { class: "grid-check" }, h("input", {
-					type: "checkbox", checked: hasSource(model, key), onchange: () => tickAnalog(repeater),
-				})),
+			const freqs = `${geo.formatMHz(repeater.downlink_mhz * 1e6)} / ${geo.formatMHz(repeater.uplink_mhz * 1e6)}`;
+			const tone = repeater.tx_tone || t("editor.builder.no_tone");
+			const place = `${repeater.city || "—"} · ${geo.formatKm(repeater.distance_km)} · ${analog.bandOf(repeater.downlink_mhz).toUpperCase()}`;
+			const source = analog.SOURCE_NAMES[repeater.source] || repeater.source;
+			analogKeys.push(key);
+			analogSig.push(`${key}|${repeater.callsign}|${freqs}|${tone}|${place}|${source}`);
+			analogRows.push(h("tr", {},
+				h("td", { class: "grid-check" }, h("input", { type: "checkbox", onchange: () => tickAnalog(repeater) })),
 				h("td", {}, repeater.callsign),
-				h("td", { class: "c-num" }, `${geo.formatMHz(repeater.downlink_mhz * 1e6)} / ${geo.formatMHz(repeater.uplink_mhz * 1e6)}`),
-				h("td", {}, repeater.tx_tone || t("editor.builder.no_tone")),
-				h("td", {}, `${repeater.city || "—"} · ${geo.formatKm(repeater.distance_km)} · ${analog.bandOf(repeater.downlink_mhz).toUpperCase()}`),
-				h("td", {}, analog.SOURCE_NAMES[repeater.source] || repeater.source)));
+				h("td", { class: "c-num" }, freqs),
+				h("td", {}, tone),
+				h("td", {}, place),
+				h("td", {}, source)));
 		}
 		P.analogStatus.textContent = near.length
 			? t("editor.builder.analog_found", { n: near.length, km: B.prefs.radius })
@@ -705,7 +743,7 @@ function update() {
 	} else {
 		P.analogStatus.textContent = t("editor.builder.need_location");
 	}
-	P.analogRows.replaceChildren(...analogRows);
+	syncRows(P.analogWrap, P.analogRows, analogSig.join("\n"), analogRows, (i) => hasSource(model, analogKeys[i]));
 	if (B.fileReport) {
 		P.fileOutput.replaceChildren(h("p", { class: "small muted" },
 			t("editor.builder.file_read", { n: B.fileReport.repeaters.length, name: B.fileReport.source })));

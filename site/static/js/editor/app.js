@@ -178,10 +178,17 @@ function renderToolbar(errors) {
 	);
 }
 
+// A part that returns the element it built last time keeps it in the page: re-appending the same node detaches it
+// first, which throws away the scroll position inside its tables and the focus in them.
+function showPart(node) {
+	if (node && node.parentNode === view) return;
+	view.replaceChildren(node);
+}
+
 function renderView(p) {
 	const tab = S.tab;
 	if (tab === "radio") return view.replaceChildren(radioTab());
-	if (tab === "builder") return view.replaceChildren(extensions.builderTab(api()));
+	if (tab === "builder") return showPart(extensions.builderTab(api()));
 	if (tab === "iddb") return view.replaceChildren(extensions.iddbTab(api()));
 	if (tab === "systems") return view.replaceChildren(systemsTab(api(), features()));
 	if (tab === "problems") return view.replaceChildren(problemsTab(p));

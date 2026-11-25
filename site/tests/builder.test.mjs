@@ -7,6 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { empty, validate } from "../static/js/codeplug/model.js";
 import { importQdmr } from "../static/js/codeplug/qdmr.js";
@@ -473,4 +474,29 @@ test("a tone the radio cannot take is dropped and reported, not passed through",
 	const result = addAnalog(model, { callsign: "ED7YAY", downlink_mhz: 145.65, uplink_mhz: 145.05, tx_tone: "CC1" });
 	assert.equal(model.channels[0].txTone, "");
 	assert.ok(result.warnings.some((w) => w.code === "tones_dropped"));
+});
+
+// --- the Builder tab keeps what it rendered ---------------------------------
+//
+// These read the sources, because the bug they cover only shows up in a browser:
+// the page redraws a part by replacing its node, which detaches and re-attaches
+// the tab and resets the scroll position inside its tables. Both files have to
+// agree that the Builder's element stays where it is.
+
+const appSource = readFileSync(new URL("../static/js/editor/app.js", import.meta.url), "utf8");
+const partSource = readFileSync(new URL("../static/js/editor/builderpart.js", import.meta.url), "utf8");
+
+test("the page keeps the Builder's element instead of re-appending it", () => {
+	assert.match(appSource, /function showPart\(node\) \{\s*\n\tif \(node && node\.parentNode === view\) return;/,
+		"showPart skips a node already in the page");
+	assert.match(appSource, /tab === "builder"\) return showPart\(extensions\.builderTab/, "the Builder tab uses it");
+});
+
+test("the Builder's tables update in place, and keep their scroll on a rebuild", () => {
+	assert.match(partSource, /function syncRows\(wrap, tbody, signature, rows, isOn\)/);
+	// in place: no replaceChildren on the tick path
+	assert.match(partSource, /if \(tbody\.dataset\.sig !== signature \|\| tbody\.children\.length !== rows\.length\) \{/);
+	assert.match(partSource, /const top = wrap\.scrollTop;[\s\S]{0,200}wrap\.scrollTop = top;/, "a rebuild restores the scroll");
+	// and three tables use it
+	assert.equal((partSource.match(/syncRows\(P\.\w+Wrap,/g) || []).length, 3, "the three lists");
 });
