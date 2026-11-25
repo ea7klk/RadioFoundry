@@ -421,3 +421,56 @@ test("names stay unique across separate ticks", () => {
 	const all = model.channels.map((c) => c.name);
 	assert.equal(new Set(all).size, all.length);
 });
+
+// --- the band filter, and tones reaching the codeplug -----------------------
+
+test("the band filter chooses one band and never filters everything out", () => {
+	const rows = analog.decodeSnapshot([
+		["V1", 145.7, 145.1, "82.5", 36.7, -4.4, "FM", "x", "h"],
+		["U1", 438.65, 431.05, "77.0", 36.7, -4.4, "FM", "x", "u"],
+	]);
+	const at = (band) => analog.nearby(rows, 36.7, -4.4, 50, { band }).map((r) => r.callsign);
+	assert.deepEqual(at("all"), ["U1", "V1"]);
+	assert.deepEqual(at("vhf"), ["V1"]);
+	assert.deepEqual(at("uhf"), ["U1"]);
+	assert.deepEqual(at("bogus"), ["U1", "V1"], "an unknown band means every band");
+	assert.deepEqual(at(undefined), ["U1", "V1"]);
+	assert.equal(analog.asBand(""), "all");
+});
+
+test("a UHF repeater is listed and its tone reaches the channel", () => {
+	const model = empty();
+	addAnalog(model, {
+		callsign: "ED7YAE", downlink_mhz: 438.65, uplink_mhz: 431.05,
+		tx_tone: "82.5", rx_tone: "", source: "u",
+	});
+	const channel = model.channels[0];
+	assert.equal(channel.rxHz, 438_650_000);
+	assert.equal(channel.txHz, 431_050_000);
+	assert.equal(channel.txTone, "82.5");
+	assert.equal(channel.rxTone, "");
+});
+
+test("both tones reach the channel when the repeater has both", () => {
+	const model = empty();
+	addAnalog(model, {
+		callsign: "ED7YAO", downlink_mhz: 145.725, uplink_mhz: 145.125,
+		tx_tone: "88.5", rx_tone: "77.0",
+	});
+	const channel = model.channels[0];
+	assert.equal(channel.txTone, "88.5");
+	assert.equal(channel.rxTone, "77.0");
+});
+
+test("a DCS code reaches the channel as a DCS code", () => {
+	const model = empty();
+	addAnalog(model, { callsign: "ED7YAZ", downlink_mhz: 145.6, uplink_mhz: 145.0, tx_tone: "D023N", rx_tone: "" });
+	assert.equal(model.channels[0].txTone, "D023N");
+});
+
+test("a tone the radio cannot take is dropped and reported, not passed through", () => {
+	const model = empty();
+	const result = addAnalog(model, { callsign: "ED7YAY", downlink_mhz: 145.65, uplink_mhz: 145.05, tx_tone: "CC1" });
+	assert.equal(model.channels[0].txTone, "");
+	assert.ok(result.warnings.some((w) => w.code === "tones_dropped"));
+});

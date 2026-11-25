@@ -314,10 +314,15 @@ function build(api) {
 			changed();
 		} });
 	P.analogRadiusOut = h("output", {}, t("editor.builder.km", { km: B.prefs.radius }));
+	// The band filter: VHF below 300 MHz, UHF above it. The options are built
+	// here, not in update(), so the control keeps them across redraws.
 	P.band = h("select", { onchange: () => {
 		B.prefs.band = P.band.value;
 		changed();
-	} });
+	} },
+	h("option", { value: "all" }, t("editor.builder.band_all")),
+	h("option", { value: "vhf" }, t("editor.builder.band_vhf")),
+	h("option", { value: "uhf" }, t("editor.builder.band_uhf")));
 	P.analogRows = h("tbody");
 	P.analogStatus = h("p", { class: "small muted" });
 	P.fileOutput = h("div", {});
@@ -487,6 +492,7 @@ function syncInputs() {
 	P.analogRadius.value = String(B.prefs.radius);
 	P.dmrRadiusOut.textContent = B.api.t("editor.builder.km", { km: B.prefs.radius });
 	P.analogRadiusOut.textContent = B.api.t("editor.builder.km", { km: B.prefs.radius });
+	if (!["all", "vhf", "uhf"].includes(B.prefs.band)) B.prefs.band = "all";
 	P.band.value = B.prefs.band;
 	P.simplexOn.checked = B.prefs.simplex.enabled;
 	P.simplexAccess.checked = B.prefs.simplex.includeAccess;

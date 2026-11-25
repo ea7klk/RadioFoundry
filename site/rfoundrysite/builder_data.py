@@ -134,6 +134,35 @@ def number(value):
         return None
 
 
+# URE publishes its figures as text: "145.725 MHz", and in Spanish notation
+# "145.712,5 MHz", where the dot separates whole MHz from a kHz part that carries
+# a decimal comma. A plain float() reads none of them, so the whole Spanish list
+# used to be dropped without a word.
+# One figure may carry both separators: "145.712,5" is 145.712 MHz plus 5 kHz.
+_MEASURE = re.compile(r"-?\d+(?:[.,]\d+){0,2}")
+
+
+def measure(value):
+    """The number in a figure with a unit: '145.725 MHz', '145.712,5 MHz', '-600 kHz'."""
+    raw = re.sub(r"[^0-9,.+-]", "", str(value or ""))
+    match = _MEASURE.search(raw)
+    if not match:
+        return None
+    token = match.group(0)
+    sign = -1.0 if token.startswith("-") else 1.0
+    token = token.lstrip("+-")
+    if "," in token and "." in token:
+        whole, _, fraction = token.rpartition(".")
+        try:
+            return sign * (float(whole.replace(",", "")) + float(fraction.replace(",", ".")) / 1000)
+        except ValueError:
+            return None
+    try:
+        return sign * float(token.replace(",", "."))
+    except ValueError:
+        return None
+
+
 def integer(value):
     try:
         return int(str(value).strip())
@@ -231,21 +260,30 @@ def normalize_hearham(raw):
     }
 
 
-TONES = re.compile(r"^(?:D?[0-7]{1,3}[NI]?|[0-9]{2,3}(?:\.[0-9])?)$")
+# A DCS code is written D023N / D023I: the D is required. Without it, HearHam's
+# "0" (no tone) read as a DCS code and 745 repeaters were given a tone of "0".
+TONES = re.compile(r"^(?:D[0-7]{1,3}[NI]?|[0-9]{2,3}(?:\.[0-9])?)$")
 
 
 def clean_tone(value):
-    """A tone as the radio stores it, or "". A decimal comma is the same tone."""
+    """A tone as the radio stores it, or "".
+
+    A CTCSS tone is 67.0-300.0 Hz, so "00" and "0" are not tones, whatever
+    their digits look like; a decimal comma is the same tone.
+    """
     tone = text(value, 8).upper()
     tone = re.sub(r"^(\d{2,3}),(\d)$", r"\1.\2", tone)
     if not tone or tone in ("NONE", "OFF", "CSQ", "-") or not TONES.match(tone):
         return ""
-    return tone
+    if tone.startswith("D"):
+        return tone
+    hz = float(tone)
+    return tone if 67.0 <= hz <= 300.0 else ""
 
 
 def parse_ure_shift(raw):
     """'-600 kHz', '- 7.6 MHz', '-7.6MHz' and a bare '-600' all in MHz."""
-    value = number(raw)
+    value = measure(raw)
     if value is None:
         return 0.0
     lowered = str(raw).lower()
@@ -267,7 +305,7 @@ def normalize_ure(raw, band):
     callsign = text(raw.get("name"), 16).upper()
     if not re.search(r"[A-Z]", callsign):
         return None
-    down = number(text(raw.get("freq"), 24))
+    down = measure(raw.get("freq"))
     lat, lon = number(raw.get("lat")), number(raw.get("lng"))
     if not callsign or down is None or lat is None or lon is None:
         return None

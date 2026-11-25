@@ -2516,5 +2516,8 @@
  "editor.builder.note_power_title": "Imposta la potenza di ogni canale",
  "editor.builder.note_power": "Ogni canale aggiunto dal Costruttore parte con la potenza predefinita della radio. Passali in rassegna e imposta per ciascuno la potenza minima sufficiente: un canale simplex locale raramente richiede più di bassa, un ripetitore a 30 km può richiedere alta. Non superare mai la potenza consentita dalla licenza né il limite del servizio a cui appartiene il canale: PMR446 è 0,5 W ERP, FRS è 2 W sulla maggior parte dei canali e 0,5 W sugli 8–14, un portatile marino usa di solito 1 W in bassa. Un punto di accesso o una modalità hotspot non dovrebbe superare i 5–10 W.",
  "editor.builder.note_zones_title": "Controlla le zone",
- "editor.builder.note_zones": "Il Costruttore raggruppa ciò che aggiunge in zone per tipo — DMR, DMR SIMPLEX, DMR ACCESS, ANALOG, STANDARD, APRS — e divide un gruppo oltre gli 80 canali per zona della radio. È un punto di partenza, non un piano: controlla ogni zona, togli i canali che non userai, sposta in una sola quelli che usi insieme e riordinali perché i più usati vengano prima. Una zona che la radio scansiona vale più di un lungo elenco da scorrere sul campo."
+ "editor.builder.note_zones": "Il Costruttore raggruppa ciò che aggiunge in zone per tipo — DMR, DMR SIMPLEX, DMR ACCESS, ANALOG, STANDARD, APRS — e divide un gruppo oltre gli 80 canali per zona della radio. È un punto di partenza, non un piano: controlla ogni zona, togli i canali che non userai, sposta in una sola quelli che usi insieme e riordinali perché i più usati vengano prima. Una zona che la radio scansiona vale più di un lungo elenco da scorrere sul campo.",
+ "editor.builder.band_all": "Tutte le bande",
+ "editor.builder.band_vhf": "Solo VHF",
+ "editor.builder.band_uhf": "Solo UHF"
 }

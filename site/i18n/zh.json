@@ -2516,5 +2516,8 @@
  "editor.builder.note_power_title": "为每个信道设置功率",
  "editor.builder.note_power": "构建器加入的每个信道都从电台的默认功率开始。请逐个检查，设置为够用即可的最低功率：本地单工信道很少需要高于低功率，30 公里外的中继台可能需要高功率。不要超过执照允许的功率，也不要超过该信道所属业务的限制：PMR446 为 0.5 W ERP，FRS 大多数信道为 2 W、8–14 信道为 0.5 W，海事手持台低功率通常为 1 W。接入点或热点模式最多 5–10 W。",
  "editor.builder.note_zones_title": "检查分区",
- "editor.builder.note_zones": "构建器按类型把加入的内容分到各分区——DMR、DMR SIMPLEX、DMR ACCESS、ANALOG、STANDARD、APRS——超过电台每分区 80 个信道时再拆开。这只是起点，不是方案：逐个检查分区，删掉不会用到的信道，把常一起使用的移进同一分区，并重新排序让常用的排在前。电台能扫描的分区，比在外场要翻找的长列表有用得多。"
+ "editor.builder.note_zones": "构建器按类型把加入的内容分到各分区——DMR、DMR SIMPLEX、DMR ACCESS、ANALOG、STANDARD、APRS——超过电台每分区 80 个信道时再拆开。这只是起点，不是方案：逐个检查分区，删掉不会用到的信道，把常一起使用的移进同一分区，并重新排序让常用的排在前。电台能扫描的分区，比在外场要翻找的长列表有用得多。",
+ "editor.builder.band_all": "全部频段",
+ "editor.builder.band_vhf": "仅 VHF",
+ "editor.builder.band_uhf": "仅 UHF"
 }

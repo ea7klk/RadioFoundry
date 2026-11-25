@@ -5,9 +5,15 @@
 
 export const SOURCES = [
 	{
-		"id": "talkgroups",
-		"name": "Brandmeister talkgroups",
-		"url": "https://api.brandmeister.network/v2/talkgroup",
-		"rows": 1848
+		"id": "u",
+		"name": "URE (Spain)",
+		"url": "https://www.ure.es/appure/repetidores-nuevos_test/api.php?band=repe144",
+		"rows": 212
+	},
+	{
+		"id": "h",
+		"name": "HearHam",
+		"url": "https://hearham.com/api/repeaters/v1",
+		"rows": 14968
 	}
 ];

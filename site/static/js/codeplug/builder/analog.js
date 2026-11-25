@@ -239,8 +239,13 @@ export function decodeSnapshot(rows) {
 export const VHF_MAX_MHZ = 300;
 export const bandOf = (mhz) => (mhz < VHF_MAX_MHZ ? "vhf" : "uhf");
 
+// A band choice as the page stores it: "all", "vhf" or "uhf". Anything else is
+// "all", never a filter that matches nothing.
+export const asBand = (value) => (value === "vhf" || value === "uhf" ? value : "all");
+
 // Repeaters within radiusKm of a point, nearest first, optionally one band only.
 export function nearby(repeaters, lat, lon, radiusKm, { band = "all", limit = 300 } = {}) {
+	band = asBand(band);
 	const found = [];
 	for (const repeater of repeaters) {
 		if (band !== "all" && bandOf(repeater.downlink_mhz) !== band) continue;
