@@ -527,3 +527,30 @@ test("every country the Builder offers has a name in every language", () => {
 		}
 	}
 });
+
+// --- every message the plan can produce has words in every language ----------
+
+const planSource = readFileSync(new URL("../static/js/codeplug/builder/plan.js", import.meta.url), "utf8");
+const messageCodes = [...new Set([...planSource.matchAll(/(?:code: |warn\()"([a-z_]+)"/g)].map((m) => m[1]))].sort();
+
+test("the plan's warning and note codes are the ones the catalogues name", () => {
+	assert.ok(messageCodes.length >= 18, `found ${messageCodes.length}`);
+	const catalogues = ["en", "es", "it", "zh"].map((code) => [code,
+		JSON.parse(readFileSync(new URL(`../i18n/${code}.json`, import.meta.url), "utf8"))]);
+	for (const [code, strings] of catalogues) {
+		const missing = messageCodes.filter((name) => !(`editor.builder.msg.${name}` in strings));
+		assert.deepEqual(missing, [], `${code}.json has no text for ${missing.join(", ")}`);
+	}
+});
+
+test("every pack title and summary and simplex contact has a text in every language", () => {
+	const catalogues = ["en", "es", "it", "zh"].map((code) => [code,
+		JSON.parse(readFileSync(new URL(`../i18n/${code}.json`, import.meta.url), "utf8"))]);
+	const keys = [];
+	for (const pack of packs.PACKS) keys.push(`editor.builder.pack.${pack.id}.title`, `editor.builder.pack.${pack.id}.summary`);
+	for (const contact of dmr.CONTACTS) keys.push(`editor.builder.contact.${contact.id}.label`, `editor.builder.contact.${contact.id}.help`);
+	for (const [code, strings] of catalogues) {
+		const missing = keys.filter((key) => !(key in strings));
+		assert.deepEqual(missing, [], `${code}.json has no text for ${missing.join(", ")}`);
+	}
+});

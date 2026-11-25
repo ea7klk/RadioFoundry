@@ -95,6 +95,42 @@ const label = (key, english) => {
 // data carries; a code no one can name shows as the code.
 const place = (cc) => packs.countryName(cc, LANG) || cc;
 
+// A simplex plan's English title to its id, so a message can name it in the
+// page's language.
+const PLAN_TITLES = Object.fromEntries(dmr.PLANS.map((plan) => [plan.title, plan.id]));
+
+// The values a plan message carries that are themselves names: a country code,
+// a list of them, an IARU region, a simplex plan's title. They are named in the
+// page's language before the sentence is filled in, so no message reads
+// "DMR simplex (Spain) ... for ES".
+function localiseParams(params = {}) {
+	const out = { ...params };
+	if (typeof out.country === "string" && /^[A-Za-z]{2}$/.test(out.country)) out.country = place(out.country.toUpperCase());
+	if (typeof out.countries === "string") {
+		out.countries = out.countries.split(",").map((code) => place(code.trim())).join(", ");
+	}
+	if (typeof out.region === "string" && packs.REGIONS[out.region]) {
+		out.region = label(`editor.builder.region_${out.region.toLowerCase()}`, packs.REGIONS[out.region].label);
+	}
+	if (typeof out.name === "string" && PLAN_TITLES[out.name]) {
+		out.name = label(`editor.builder.plan.${PLAN_TITLES[out.name]}`, out.name);
+	}
+	if (typeof out.plan === "string" && PLAN_TITLES[out.plan]) {
+		out.plan = label(`editor.builder.plan.${PLAN_TITLES[out.plan]}`, out.plan);
+	}
+	return out;
+}
+
+// A warning or note from plan.js in the page's language. The English the plan
+// carries is the fallback, so a code added there without a catalog entry still
+// says something.
+const message = (entry) => {
+	const { t } = B.api;
+	const key = `editor.builder.msg.${entry.code}`;
+	const text = t(key, localiseParams(entry.params));
+	return text === key ? entry.message : text;
+};
+
 // A choice changed: keep it, then redraw. Module level, because update() and
 // the handlers both call it.
 const changed = () => {
@@ -626,10 +662,10 @@ function update() {
 		const box = h("input", { type: "checkbox", checked: hasSource(model, key), onchange: () => tickPack(pack, true) });
 		return h("label", { class: "rid-check ed-builder-pack" }, box,
 			h("span", {},
-				h("strong", {}, pack.title), " ",
+				h("strong", {}, label(`editor.builder.pack.${pack.id}.title`, pack.title)), " ",
 				h("span", { class: "badge" }, t("editor.builder.pack_channels", { n: count })),
 				applies ? null : h("span", { class: "badge" }, t("editor.builder.other_region")),
-				h("span", { class: "small muted ed-builder-pack-summary" }, pack.summary)));
+				h("span", { class: "small muted ed-builder-pack-summary" }, label(`editor.builder.pack.${pack.id}.summary`, pack.summary))));
 	}));
 	const aprsPack = packs.PACKS.some((pack) => pack.id.startsWith("aprs_") && hasSource(model, `pack:${pack.id}`));
 	P.aprs.checked = hasSource(model, "aprs");
@@ -778,7 +814,8 @@ function update() {
 				return;
 			}
 			chooseSimplex(entry.id);
-		} }, h("strong", {}, entry.label), h("span", { class: "small muted" }, entry.help));
+		} }, h("strong", {}, label(`editor.builder.contact.${entry.id}.label`, entry.label)),
+			h("span", { class: "small muted" }, label(`editor.builder.contact.${entry.id}.help`, entry.help)));
 	}));
 	P.simplexAccess.checked = B.prefs.simplex.includeAccess;
 	P.simplexAccess.disabled = !simplexOn;
@@ -833,7 +870,7 @@ function report(result, added, removed) {
 	else if (removed) B.api.say(t("editor.builder.removed_tick"), "info");
 	if (warnings.length) {
 		B.P.output.replaceChildren(h("ul", { class: "ed-builder-problems" },
-			...warnings.map((warning) => h("li", { class: "muted" }, warning.message))));
+			...warnings.map((warning) => h("li", { class: "muted" }, message(warning)))));
 	} else {
 		B.P.output.replaceChildren();
 	}
@@ -918,7 +955,7 @@ function tickPack(pack, on) {
 			result.warnings = [...result.warnings, ...aprs.warnings];
 		}
 		return result;
-	}, key, B.api.t("editor.builder.tick_pack", { name: pack.title }));
+	}, key, B.api.t("editor.builder.tick_pack", { name: label(`editor.builder.pack.${pack.id}.title`, pack.title) }));
 }
 
 function tickTalkgroup(tg, name) {
@@ -999,7 +1036,7 @@ function applyStationFields() {
 		const applied = applyStation(model, station);
 		return { ok: true, warnings: applied.warnings, notes: applied.notes };
 	});
-	if (result?.notes?.length) B.api.say(result.notes.map((note) => note.message).join(" "), "ok");
+	if (result?.notes?.length) B.api.say(result.notes.map(message).join(" "), "ok");
 }
 
 export { B as builderState };

@@ -233,7 +233,7 @@ function toneOf(value, warn) {
 	if (!raw) return "";
 	const parsed = parseTone(raw);
 	if (parsed === null) {
-		warn("tones_dropped", `${raw} is not a CTCSS or DCS tone the radio takes; left empty.`);
+		warn("tones_dropped", `${raw} is not a CTCSS or DCS tone the radio takes; left empty.`, { tone: raw });
 		return "";
 	}
 	return parsed;
@@ -248,8 +248,8 @@ export function addRepeater(model, repeater, { key = `dmr:${repeater?.id}`, fall
 	const receipt = emptyReceipt();
 	const warnings = [];
 	const notes = [];
-	const warn = (code, message) => {
-		if (!warnings.some((w) => w.code === code && w.message === message)) warnings.push({ code, message });
+	const warn = (code, message, params) => {
+		if (!warnings.some((w) => w.code === code && w.message === message)) warnings.push({ code, message, ...(params ? { params } : {}) });
 	};
 	const sc = scene(model);
 
@@ -258,13 +258,13 @@ export function addRepeater(model, repeater, { key = `dmr:${repeater?.id}`, fall
 		: [];
 	if (!talkgroups.length && fallbackTg) {
 		talkgroups = [{ tg: 9, slot: 0, name: "Local" }];
-		warn("no_talkgroups", `${repeater.callsign || repeater.id}: no static talkgroups listed; TG 9 (Local) is the default contact.`);
+		warn("no_talkgroups", `${repeater.callsign || repeater.id}: no static talkgroups listed; TG 9 (Local) is the default contact.`, { call: repeater.callsign || repeater.id });
 	}
 
 	const contacts = talkgroups.slice(0, RX_LIST_CONTACTS)
 		.map((tg) => contactFor(model, sc, receipt, String(tg.name || `TG ${tg.tg}`), Number(tg.tg), "group", tg.slot));
 	if (talkgroups.length > RX_LIST_CONTACTS) {
-		warn("rx_list_truncated", `${repeater.callsign || repeater.id}: ${talkgroups.length} talkgroups, but an RX group list holds ${RX_LIST_CONTACTS}; the rest are not in the list.`);
+		warn("rx_list_truncated", `${repeater.callsign || repeater.id}: ${talkgroups.length} talkgroups, but an RX group list holds ${RX_LIST_CONTACTS}; the rest are not in the list.`, { call: repeater.callsign || repeater.id, n: talkgroups.length, max: RX_LIST_CONTACTS });
 	}
 
 	let list = null;
@@ -273,7 +273,7 @@ export function addRepeater(model, repeater, { key = `dmr:${repeater?.id}`, fall
 		model.rxLists.push(list);
 		receipt.rxLists.push(list);
 	}
-	if (!contacts.length) warn("no_default_contact", `${repeater.callsign || repeater.id}: no talkgroup to use as the default contact.`);
+	if (!contacts.length) warn("no_default_contact", `${repeater.callsign || repeater.id}: no talkgroup to use as the default contact.`, { call: repeater.callsign || repeater.id });
 
 	const channel = newChannel({
 		number: null,
@@ -296,6 +296,7 @@ export function addRepeater(model, repeater, { key = `dmr:${repeater?.id}`, fall
 		notes.push({
 			code: "timeslot_overrides",
 			message: `${overrides} talkgroup contact${overrides === 1 ? " carries" : "s carry"} the timeslot override Brandmeister publishes.`,
+			params: { n: overrides },
 		});
 	}
 	ledger(model).set(key, receipt);
@@ -308,9 +309,9 @@ export function addAnalog(model, repeater, { key } = {}) {
 	const warnings = [];
 	const sc = scene(model);
 	const id = key || `analog:${repeater.source || "h"}:${repeater.callsign}:${repeater.downlink_mhz}:${repeater.uplink_mhz}`;
-	const warn = (code, message) => warnings.push({ code, message });
+	const warn = (code, message, params) => warnings.push({ code, message, ...(params ? { params } : {}) });
 	if (!repeater.tx_tone) {
-		warn("analog_no_tone", `${repeater.callsign || "analog repeater"} at ${Number(repeater.downlink_mhz).toFixed(4)} MHz has no tone listed; if it needs one, set it in the channel.`);
+		warn("analog_no_tone", `${repeater.callsign || "analog repeater"} at ${Number(repeater.downlink_mhz).toFixed(4)} MHz has no tone listed; if it needs one, set it in the channel.`, { call: repeater.callsign || "", mhz: Number(repeater.downlink_mhz).toFixed(4) });
 	}
 	const channel = newChannel({
 		number: null,
@@ -337,7 +338,7 @@ export function addPack(model, packId, { region = "R1", country = "" } = {}) {
 	const warnings = [];
 	if (!pack) return { ok: false, receipt, warnings, notes: [] };
 	if (!packApplies(pack, region, country)) {
-		warnings.push({ code: "pack_region", message: `${pack.title} is not part of ${region}${country ? `/${country}` : ""}; it was added anyway.` });
+		warnings.push({ code: "pack_region", message: `${pack.title} is not part of ${region}${country ? `/${country}` : ""}; it was added anyway.`, params: { name: pack.title, region, country } });
 	}
 	const sc = scene(model);
 	const channels = [];
@@ -384,14 +385,14 @@ export function addSimplex(model, { plan = "es", choice = "tg99", includeAccess 
 	const notes = [];
 	const planDef = PLAN_BY_ID.get(plan);
 	if (!planDef) {
-		warnings.push({ code: "simplex_plan_unknown", message: `Unknown DMR simplex plan "${plan}"; no simplex channels were added.` });
+		warnings.push({ code: "simplex_plan_unknown", message: `Unknown DMR simplex plan "${plan}"; no simplex channels were added.`, params: { plan } });
 		return { ok: false, receipt, warnings, notes };
 	}
 	if (planDef.countries?.length && country && !planDef.countries.includes(country)) {
-		warnings.push({ code: "simplex_country", message: `${planDef.title} is a national agreement for ${planDef.countries.join(", ")}; it was added for ${country} anyway.` });
+		warnings.push({ code: "simplex_country", message: `${planDef.title} is a national agreement for ${planDef.countries.join(", ")}; it was added for ${country} anyway.`, params: { name: planDef.title, countries: planDef.countries.join(", "), country } });
 	}
 	const use = ["tg99", "all", "both"].includes(choice) ? choice : "tg99";
-	if (use !== choice) warnings.push({ code: "simplex_contact_unknown", message: `Unknown DMR simplex contact "${choice}"; TG 99 was used.` });
+	if (use !== choice) warnings.push({ code: "simplex_contact_unknown", message: `Unknown DMR simplex contact "${choice}"; TG 99 was used.`, params: { choice } });
 	const sc = scene(model);
 	const voice = [];
 	const access = [];
@@ -420,6 +421,7 @@ export function addSimplex(model, { plan = "es", choice = "tg99", includeAccess 
 		message: `${voice.length} DMR simplex channel${voice.length === 1 ? "" : "s"} from the ${planDef.title} plan` +
 			(access.length ? `, plus ${access.length} access-point channel${access.length === 1 ? "" : "s"}` : "") +
 			` (${use === "both" ? "TG 99 and AllCall" : use === "all" ? "AllCall" : "TG 99"}).`,
+		params: { n: voice.length, plan: planDef.title, access: access.length, contact: use },
 	});
 	if (use === "both") {
 		notes.push({
@@ -450,7 +452,7 @@ export function addAprs(model, { location, callsign, ssid = 7, country = "", key
 	}
 	const id = Math.max(0, Math.min(15, Number(ssid) || 0));
 	const name = fit(`${call}-${id}`, LIMITS.aprsName);
-	if (name !== `${call}-${id}`) warnings.push({ code: "aprs_name_long", message: `APRS name ${call}-${id} is longer than ${LIMITS.aprsName} characters and was cut; the SSID may be missing.` });
+	if (name !== `${call}-${id}`) warnings.push({ code: "aprs_name_long", message: `APRS name ${call}-${id} is longer than ${LIMITS.aprsName} characters and was cut; the SSID may be missing.`, params: { name: `${call}-${id}`, max: LIMITS.aprsName } });
 	const locator = latLonToLocator(Number(location.lat), Number(location.lon), 6);
 	const entry = {
 		number: null,
@@ -474,7 +476,7 @@ export function addAprs(model, { location, callsign, ssid = 7, country = "", key
 	receipt.aprs.push(entry);
 	const had = target.aprs;
 	target.aprs = entry;
-	notes.push({ code: "aprs_config", message: `APRS position ${locator} added on ${(target.rxHz / 1e6).toFixed(3)} MHz as ${name}.` });
+	notes.push({ code: "aprs_config", message: `APRS position ${locator} added on ${(target.rxHz / 1e6).toFixed(3)} MHz as ${name}.`, params: { locator, mhz: (target.rxHz / 1e6).toFixed(3), name } });
 	ledger(model).set(key, receipt);
 	return { ok: true, receipt, warnings, notes, previous: [target, had] };
 }
@@ -543,21 +545,21 @@ export function applyStation(model, { callsign = "", dmrId = "" } = {}) {
 	const call = asciiName(callsign, "").toUpperCase().replace(/[^A-Z0-9/]/g, "");
 	if (call) {
 		const name = fit(call, LIMITS.radioName);
-		if (nameBytes(call) > LIMITS.radioName) warnings.push({ code: "callsign_long", message: `Callsign ${call} is longer than the ${LIMITS.radioName} characters the radio shows; it was cut.` });
+		if (nameBytes(call) > LIMITS.radioName) warnings.push({ code: "callsign_long", message: `Callsign ${call} is longer than the ${LIMITS.radioName} characters the radio shows; it was cut.`, params: { call, max: LIMITS.radioName } });
 		if (!model.general.radioName) {
 			model.general.radioName = name;
-			notes.push({ code: "name_set", message: `Radio name set to ${name}.` });
+			notes.push({ code: "name_set", message: `Radio name set to ${name}.`, params: { name } });
 		} else if (model.general.radioName !== name) {
-			notes.push({ code: "name_kept", message: `The radio name ("${model.general.radioName}") was kept; ${call} was not written over it.` });
+			notes.push({ code: "name_kept", message: `The radio name ("${model.general.radioName}") was kept; ${call} was not written over it.`, params: { kept: model.general.radioName, call } });
 		}
 	}
 	const id = Number.parseInt(String(dmrId ?? ""), 10);
 	if (Number.isInteger(id) && id > 0 && id <= 0xffffff) {
 		if (!model.general.dmrId) {
 			model.general.dmrId = id;
-			notes.push({ code: "dmr_id_set", message: `DMR ID set to ${id}.` });
+			notes.push({ code: "dmr_id_set", message: `DMR ID set to ${id}.`, params: { id } });
 		} else if (model.general.dmrId !== id) {
-			notes.push({ code: "dmr_id_kept", message: `The DMR ID (${model.general.dmrId}) was kept; ${id} was not written over it.` });
+			notes.push({ code: "dmr_id_kept", message: `The DMR ID (${model.general.dmrId}) was kept; ${id} was not written over it.`, params: { kept: model.general.dmrId, id } });
 		}
 	}
 	return { warnings, notes };
