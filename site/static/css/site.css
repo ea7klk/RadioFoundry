@@ -743,6 +743,9 @@ abbr.gl:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; bo
 
 /* The Builder tab (editor/builderpart.js): numbered steps, the repeater and talkgroup tables, and a fixed action bar */
 .ed-builder { max-width: 74rem; }
+/* Fields line up at their labels, not at their bottoms: a field with a help line under it made its neighbour sit
+   lower, putting the two inputs on different lines. */
+.ed-builder .rid-grid { align-items: start; }
 /* The banner at the top of the Builder tab: what it does, then the two things to do afterwards */
 .ed-builder-intro {
 	border: 1px solid var(--border);

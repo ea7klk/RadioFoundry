@@ -494,8 +494,8 @@ function build(api) {
 			h("label", { class: "rid-check" }, P.simplexAccess, h("span", {}, t("editor.builder.simplex_access"))),
 			h("p", { class: "small muted" }, t("editor.builder.s6_note"))),
 		step(7, t("editor.builder.s7"),
-			card(field(t("editor.builder.callsign"), P.callsign, t("editor.builder.callsign_help")),
-				field(t("editor.builder.dmr_id"), P.dmrId))),
+			card(field(t("editor.builder.callsign"), P.callsign), field(t("editor.builder.dmr_id"), P.dmrId)),
+			h("p", { class: "small muted" }, t("editor.builder.callsign_help"))),
 		h("div", { class: "rid-output" }, h("div", { class: "rid-row" }, P.clear, P.status), P.output),
 	);
 	syncInputs();
