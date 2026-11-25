@@ -366,8 +366,15 @@ function build(api) {
 	P.status = h("p", { class: "small muted" });
 	P.output = h("div", { class: "ed-builder-output" });
 
+	// The banner: what the tab does, then the two things to do after it, each in
+	// its own box so none of them reads as fine print.
+	const note = (tone, titleKey, textKey) => h("div", { class: `ed-builder-note ${tone}` },
+		h("h3", {}, t(titleKey)), h("p", {}, t(textKey)));
+
 	P.el = h("div", { class: "rid ed-builder" },
-		h("p", { class: "lead" }, t("editor.builder.lead")),
+		h("div", { class: "ed-builder-intro" }, h("p", { class: "lead" }, t("editor.builder.lead"))),
+		note("warn", "editor.builder.note_power_title", "editor.builder.note_power"),
+		note("info", "editor.builder.note_zones_title", "editor.builder.note_zones"),
 		step(1, t("editor.builder.s1"),
 			card(field(t("editor.builder.lat"), P.lat), field(t("editor.builder.lon"), P.lon),
 				field(t("editor.builder.locator"), P.locator)),

@@ -2512,5 +2512,9 @@
  "editor.builder.station_change": "Datos de estación desde el Constructor",
  "editor.builder.aprs_needs": "Indica antes una ubicación y un indicativo: la posición APRS necesita ambos.",
  "editor.builder.n_lists": "{n} listas de grupo RX",
- "editor.builder.n_aprs": "{n} posiciones APRS"
+ "editor.builder.n_aprs": "{n} posiciones APRS",
+ "editor.builder.note_power_title": "Ajusta la potencia de cada canal",
+ "editor.builder.note_power": "Todos los canales que añade el Constructor empiezan con la potencia por defecto de la radio. Repásalos y pon en cada uno la menor potencia que baste: un canal simplex local rara vez necesita más que baja, y un repetidor a 30 km puede necesitar alta. No superes nunca la potencia que permite tu licencia ni el límite del servicio al que pertenece el canal: PMR446 son 0,5 W PIRE, FRS es 2 W en casi todos los canales y 0,5 W en 8–14, y un portátil marino suele usar 1 W en baja. Un punto de acceso o un modo hotspot no debería pasar de 5–10 W.",
+ "editor.builder.note_zones_title": "Revisa las zonas",
+ "editor.builder.note_zones": "El Constructor agrupa lo que añade en zonas por tipo — DMR, DMR SIMPLEX, DMR ACCESS, ANALOG, STANDARD, APRS — y parte un grupo cuando pasa de 80 canales por zona, el límite de la radio. Es un punto de partida, no un plan: revisa cada zona, quita los canales que no vas a usar, junta en una sola los que usas juntos y reordénalos para que los de siempre queden primero. Una zona que la radio explora vale más que una lista larga por la que desplazarse en el campo."
 }

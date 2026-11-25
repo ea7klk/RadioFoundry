@@ -743,6 +743,29 @@ abbr.gl:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; bo
 
 /* The Builder tab (editor/builderpart.js): numbered steps, the repeater and talkgroup tables, and a fixed action bar */
 .ed-builder { max-width: 74rem; }
+/* The banner at the top of the Builder tab: what it does, then the two things to do afterwards */
+.ed-builder-intro {
+	border: 1px solid var(--border);
+	border-left: 4px solid var(--accent);
+	border-radius: var(--radius-sm);
+	background: var(--surface-2);
+	padding: var(--space-3) var(--space-4);
+}
+.ed-builder-intro .lead { margin: 0; }
+.ed-builder-note {
+	border: 1px solid var(--border);
+	border-left: 4px solid var(--border);
+	border-radius: var(--radius-sm);
+	padding: var(--space-3) var(--space-4);
+	display: grid;
+	gap: var(--space-1);
+}
+.ed-builder-note h3 { margin: 0; font-size: var(--text-sm); letter-spacing: 0.01em; }
+.ed-builder-note p { margin: 0; font-size: var(--text-sm); line-height: 1.5; }
+.ed-builder-note.warn { background: var(--warn-soft); border-left-color: var(--warn); }
+.ed-builder-note.warn h3 { color: var(--warn); }
+.ed-builder-note.info { background: var(--info-soft); border-left-color: var(--link); }
+.ed-builder-note.info h3 { color: var(--link); }
 .ed-builder .rid-step { gap: var(--space-2); }
 .ed-builder table.grid { width: 100%; }
 .ed-builder .table-wrap { max-height: 22rem; overflow: auto; }

@@ -139,6 +139,24 @@ The callsign becomes the radio name and the APRS source, and the DMR ID goes int
 the codeplug's radio settings — **but only where those fields are still empty**.
 A name or ID already in the codeplug is never overwritten; the panel says so.
 
+## Before you write it to the radio
+
+Two things the tab asks of you, because the Builder cannot know them:
+
+**Set the power on each channel.** Everything it adds starts at the radio's
+default power. Go through the channels and set each to the **least power that
+does the job** — a local simplex channel rarely needs more than low, a repeater
+30 km away may need high. Stay inside what your licence allows and what the
+service allows: PMR446 is 0.5 W ERP, FRS is 2 W on most channels and 0.5 W on
+8–14, a marine handheld is usually 1 W on low. An access point or hotspot mode
+should not run above 5–10 W.
+
+**Review the zones.** They are grouped by kind (`DMR`, `DMR SIMPLEX`,
+`DMR ACCESS`, `ANALOG`, `STANDARD`, `APRS`) and split past 80 channels per zone.
+That is a starting point, not a plan: drop channels you will never use, move the
+ones you use together into one zone, and order them so the ones you reach for
+come first.
+
 ## What each tick does
 
 | Tick | Adds, at once |

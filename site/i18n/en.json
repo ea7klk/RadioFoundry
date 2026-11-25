@@ -2512,5 +2512,9 @@
  "editor.builder.station_change": "Station details from the Builder",
  "editor.builder.aprs_needs": "Set a location and a callsign first: the APRS position needs both.",
  "editor.builder.n_lists": "{n} RX group lists",
- "editor.builder.n_aprs": "{n} APRS positions"
+ "editor.builder.n_aprs": "{n} APRS positions",
+ "editor.builder.note_power_title": "Set the power on each channel",
+ "editor.builder.note_power": "Every channel the Builder adds starts at the radio's default power. Go through them and set each one to the least power that does the job — a local simplex channel rarely needs more than low, a repeater 30 km away may need high. Never exceed the power your licence allows, or the limit for the service the channel belongs to: PMR446 is 0.5 W ERP, FRS is 2 W on most channels and 0.5 W on 8–14, and a marine handheld is usually 1 W on low power. An access point or a hotspot mode should run at 5–10 W at most.",
+ "editor.builder.note_zones_title": "Review the zones",
+ "editor.builder.note_zones": "The Builder groups what it adds into zones by kind — DMR, DMR SIMPLEX, DMR ACCESS, ANALOG, STANDARD, APRS — and splits a group past the radio's 80 channels per zone. That is a starting point, not a plan: check each zone, drop the channels you will never use, move the ones you use together into one zone, and reorder them so the ones you reach for come first. A zone the radio scans is worth more than a long list you scroll in the field."
 }
