@@ -4,8 +4,12 @@
 // The Builder tab: channels, contacts and zones built from a location. It asks
 // for a place, offers the standard analog packs, the DMR repeaters and their
 // static talkgroups, a searchable table of every Brandmeister talkgroup, the
-// analog repeaters and the DMR simplex plan, then adds the lot to the open
-// codeplug as one undoable change.
+// analog repeaters and the DMR simplex plan.
+//
+// Every tick of a box changes the open codeplug at once — the channel, contact,
+// RX group list or zone appears in its own tab — and every tick is its own
+// change, so Undo takes back exactly that one. Unticking takes exactly that
+// source's records away again and leaves anything else still using them.
 //
 // Everything runs in the page. The repeater and talkgroup lists are the
 // snapshots in codeplug/builder/data/ (Brandmeister and HearHam send no CORS
@@ -14,7 +18,12 @@
 
 import { register } from "./extensions.js";
 import { h, button } from "../flasher/dom.js";
-import { asciiName, applyPlan, problemText } from "../codeplug/builder/plan.js";
+import {
+	asciiName, problemText, applyStation,
+	addRepeater, addAnalog, addPack, addTalkgroup, addSimplex, addAprs,
+	removeSource, hasSource, sourceKeys,
+} from "../codeplug/builder/plan.js";
+import { LIMITS } from "../codeplug/records.js";
 import * as geo from "../codeplug/builder/geo.js";
 import * as packs from "../codeplug/builder/packs.js";
 import * as dmr from "../codeplug/builder/dmr.js";
@@ -29,12 +38,8 @@ const DEFAULTS = {
 	location: null,		// {lat, lon, label}
 	country: "ES",
 	region: "R1",
-	packs: [],		// pack ids
 	radius: 50,
 	band: "all",		// analog band filter
-	dmr: [],		// chosen repeater ids
-	analog: [],		// chosen analog keys
-	contacts: [],		// [{tg, name}] from the talkgroup table
 	tgQuery: "",
 	tgContinent: "all",
 	tgCountry: "",
@@ -225,7 +230,6 @@ function build(api) {
 	P.country = h("select", { onchange: () => {
 		B.prefs.country = P.country.value;
 		if (B.prefs.country) B.prefs.region = packs.regionForCountry(B.prefs.country);
-		B.prefs.packs = B.prefs.packs.filter((id) => packs.PACK_BY_ID.has(id));
 		changed();
 	} });
 	P.region = h("select", { onchange: () => {
@@ -235,7 +239,8 @@ function build(api) {
 	P.packList = h("div", { class: "ed-builder-packs" });
 	P.aprs = h("input", { type: "checkbox", onchange: () => {
 		B.prefs.options.aprsConfig = P.aprs.checked;
-		changed();
+		save();
+		tickAprs();
 	} });
 	P.ssid = h("input", { type: "text", inputmode: "numeric", maxlength: "2", value: String(B.prefs.station.ssid),
 		oninput: () => {
@@ -285,13 +290,18 @@ function build(api) {
 	P.tgRows = h("tbody");
 	P.tgStatus = h("p", { class: "small muted" });
 	P.tgAll = h("input", { type: "checkbox", "aria-label": t("editor.builder.select_all"), onchange: () => {
-		for (const row of visibleTalkgroups()) {
-			const key = row[0];
-			const at = B.prefs.contacts.findIndex((c) => c.tg === key);
-			if (P.tgAll.checked && at < 0) B.prefs.contacts.push({ tg: key, name: row[1] });
-			if (!P.tgAll.checked && at >= 0) B.prefs.contacts.splice(at, 1);
-		}
-		changed();
+		const rows = visibleTalkgroups().slice(0, 250);
+		const want = rows.filter((row) => hasSource(B.api.model, `tg:${row[0]}`)).length !== rows.length;
+		applyChange(B.api.t("editor.builder.select_all"), () => {
+			withStation(B.api.model);
+			for (const row of rows) {
+				const key = `tg:${row[0]}`;
+				if (want && !hasSource(B.api.model, key)) addTalkgroup(B.api.model, { tg: row[0], name: row[1] }, { key });
+				if (!want && hasSource(B.api.model, key)) removeSource(B.api.model, key);
+			}
+			return { ok: true };
+		});
+		update();
 	} });
 	P.tgChips = h("ul", { class: "rid-chips" });
 	P.tgCount = h("span", { class: "badge" });
@@ -318,42 +328,41 @@ function build(api) {
 		const parsed = analog.parseRepeaterFile(await picked.text(), picked.name, B.prefs.location);
 		B.file = parsed.repeaters;
 		B.fileReport = parsed;
-		B.prefs.analog = B.prefs.analog.filter((key) => parsed.repeaters.some((r) => analogKey(r) === key));
 		changed();
 	} });
 
 	// 6. DMR simplex
-	P.simplexOn = h("input", { type: "checkbox", checked: B.prefs.simplex.enabled, onchange: () => {
+	P.simplexOn = h("input", { type: "checkbox", onchange: () => {
 		B.prefs.simplex.enabled = P.simplexOn.checked;
-		changed();
+		save();
+		tickSimplex();
 	} });
 	P.simplexChoice = h("div", { class: "choice-grid ed-builder-simplex" });
-	P.simplexAccess = h("input", { type: "checkbox", checked: B.prefs.simplex.includeAccess, onchange: () => {
+	P.simplexAccess = h("input", { type: "checkbox", onchange: () => {
 		B.prefs.simplex.includeAccess = P.simplexAccess.checked;
-		changed();
+		save();
+		if (hasSource(B.api.model, "simplex")) chooseSimplex(B.prefs.simplex.choice);
+		else update();
 	} });
 
 	// 7. Station
-	P.callsign = h("input", { type: "text", maxlength: "12", value: B.prefs.station.callsign, oninput: () => {
+	P.callsign = h("input", { type: "text", maxlength: "12", value: B.prefs.station.callsign, onchange: () => {
 		B.prefs.station.callsign = P.callsign.value.toUpperCase().replace(/[^A-Z0-9/]/g, "");
 		P.callsign.value = B.prefs.station.callsign;
-		changed();
+		save();
+		applyStationFields();
 	} });
 	P.dmrId = h("input", { type: "text", inputmode: "numeric", maxlength: "8", value: B.prefs.station.dmrId,
-		oninput: () => {
+		onchange: () => {
 			B.prefs.station.dmrId = P.dmrId.value.replace(/[^0-9]/g, "");
 			P.dmrId.value = B.prefs.station.dmrId;
-			changed();
+			save();
+			applyStationFields();
 		} });
 
-	// Output
-	P.build = button(t("editor.builder.add"), () => run(), { primary: true });
-	P.clear = button(t("editor.builder.clear"), () => {
-		B.prefs = { ...DEFAULTS, station: { ...DEFAULTS.station }, options: { ...DEFAULTS.options }, simplex: { ...DEFAULTS.simplex } };
-		B.built = null;
-		syncInputs();
-		changed();
-	}, { quiet: true });
+	// Output. There is no "add" button: every tick adds or removes its own
+	// records, and each is one change the editor can undo on its own.
+	P.clear = button(t("editor.builder.clear"), () => clearAll(), { quiet: true });
 	P.status = h("p", { class: "small muted" });
 	P.output = h("div", { class: "ed-builder-output" });
 
@@ -427,7 +436,7 @@ function build(api) {
 		step(7, t("editor.builder.s7"),
 			card(field(t("editor.builder.callsign"), P.callsign, t("editor.builder.callsign_help")),
 				field(t("editor.builder.dmr_id"), P.dmrId))),
-		h("div", { class: "rid-output" }, h("div", { class: "rid-row" }, P.build, P.clear), P.status, P.output),
+		h("div", { class: "rid-output" }, h("div", { class: "rid-row" }, P.clear, P.status), P.output),
 	);
 	syncInputs();
 	B.el = P.el;
@@ -452,7 +461,7 @@ function fillCountrySelect() {
 
 function setLocation(location) {
 	B.prefs.location = { lat: Math.round(location.lat * 1e6) / 1e6, lon: Math.round(location.lon * 1e6) / 1e6, label: location.label };
-	if (!B.prefs.packs.length) B.prefs.packs = packs.defaultPacks(B.prefs.region, B.prefs.country);
+
 	syncInputs();
 	save();
 	update();
@@ -535,13 +544,16 @@ function cacheGeocode(query, results) {
 
 const analogKey = (repeater) => `${repeater.source || "h"}:${repeater.callsign}:${repeater.downlink_mhz}:${repeater.uplink_mhz}`;
 
+// Case and accents folded, so "malaga" finds "Provincial Málaga"
+const foldText = (text) => String(text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 function visibleTalkgroups() {
-	const needle = asciiName(B.prefs.tgQuery, "").toLowerCase();
+	const needle = foldText(B.prefs.tgQuery).trim();
 	const digits = B.prefs.tgQuery.replace(/[^0-9]/g, "");
 	let rows = B.talkgroups || [];
 	if (needle) {
 		rows = rows.filter((row) =>
-			row[1].toLowerCase().includes(needle) || (digits && String(row[0]).includes(digits)));
+			foldText(row[1]).includes(needle) || (digits && String(row[0]).includes(digits)));
 	}
 	if (B.prefs.tgContinent !== "all") rows = rows.filter((row) => row[2] === B.prefs.tgContinent);
 	if (B.prefs.tgCountry) rows = rows.filter((row) => row[3] === B.prefs.tgCountry);
@@ -553,32 +565,29 @@ function update() {
 	if (!P || !B.talkgroups) return;
 	const { t } = B.api;
 	const { location } = B.prefs;
+	const model = B.api.model;
 
 	P.location.replaceChildren(location
 		? h("span", {}, `${location.label} · ${geo.formatLatLon(location.lat, location.lon, 4)} · ${geo.latLonToLocator(location.lat, location.lon, 6)}`)
 		: h("span", {}, t("editor.builder.no_location")));
 
-	// packs
-	const rows = packs.PACKS.map((pack) => {
+	// packs: a tick adds its channels now, and unticking takes them away
+	P.packList.replaceChildren(...packs.PACKS.map((pack) => {
 		const applies = packs.packApplies(pack, B.prefs.region, B.prefs.country);
-		const box = h("input", { type: "checkbox", checked: B.prefs.packs.includes(pack.id), onchange: () => {
-			const at = B.prefs.packs.indexOf(pack.id);
-			if (at < 0) B.prefs.packs.push(pack.id);
-			else B.prefs.packs.splice(at, 1);
-			changed();
-		} });
 		const count = pack.channels({ region: B.prefs.region, country: B.prefs.country }).length;
+		const key = `pack:${pack.id}`;
+		const box = h("input", { type: "checkbox", checked: hasSource(model, key), onchange: () => tickPack(pack, true) });
 		return h("label", { class: "rid-check ed-builder-pack" }, box,
 			h("span", {},
 				h("strong", {}, pack.title), " ",
 				h("span", { class: "badge" }, t("editor.builder.pack_channels", { n: count })),
 				applies ? null : h("span", { class: "badge" }, t("editor.builder.other_region")),
 				h("span", { class: "small muted ed-builder-pack-summary" }, pack.summary)));
-	});
-	P.packList.replaceChildren(...rows);
-	const aprsPack = B.prefs.packs.some((id) => id.startsWith("aprs_"));
+	}));
+	const aprsPack = packs.PACKS.some((pack) => pack.id.startsWith("aprs_") && hasSource(model, `pack:${pack.id}`));
+	P.aprs.checked = hasSource(model, "aprs");
 	P.aprs.disabled = !aprsPack;
-	P.ssid.disabled = !aprsPack || !B.prefs.options.aprsConfig;
+	P.ssid.disabled = !aprsPack || !hasSource(model, "aprs");
 	P.packsNote.textContent = aprsPack ? t("editor.builder.aprs_note") : t("editor.builder.aprs_note_off");
 
 	// DMR repeaters
@@ -591,7 +600,6 @@ function update() {
 			.sort((a, b) => a.km - b.km)
 			.slice(0, 300);
 		for (const repeater of near) {
-			const chosen = B.prefs.dmr.includes(repeater.id);
 			const own = repeaterTalkgroups(repeater);
 			const first = own[0];
 			const tgText = first
@@ -599,13 +607,12 @@ function update() {
 					? t("editor.builder.tg_national", { tg: first.tg, name: first.name })
 					: `${first.tg}${first.slot ? ` · TS${first.slot}` : ""}`) + (own.length > 1 ? ` +${own.length - 1}` : "")
 				: (B.prefs.options.fallbackTg ? t("editor.builder.tg_fallback") : "—");
-			dmrRows.push(h("tr", {},
-				h("td", { class: "grid-check" }, h("input", { type: "checkbox", checked: chosen, onchange: (event) => {
-					const at = B.prefs.dmr.indexOf(repeater.id);
-					if (event.target.checked && at < 0) B.prefs.dmr.push(repeater.id);
-					if (!event.target.checked && at >= 0) B.prefs.dmr.splice(at, 1);
-					changed();
-				} })),
+			dmrRows.push(h("tr", { class: hasSource(model, `dmr:${repeater.id}`) ? "selected" : "" },
+				h("td", { class: "grid-check" }, h("input", {
+					type: "checkbox",
+					checked: hasSource(model, `dmr:${repeater.id}`),
+					onchange: () => tickRepeater(repeater),
+				})),
 				h("td", {}, repeater.callsign),
 				h("td", { class: "c-num" }, `${geo.formatMHz(repeater.downlink_mhz * 1e6)} / ${geo.formatMHz(repeater.uplink_mhz * 1e6)}`),
 				h("td", {}, `${repeater.city || "—"} · ${geo.formatKm(repeater.km)}`),
@@ -633,38 +640,34 @@ function update() {
 		...[...countries.entries()].sort((a, b) => a[0].localeCompare(b[0]))
 			.map(([cc, n]) => h("option", { value: cc }, `${cc} (${n})`)));
 	P.tgCountry.value = countries.has(B.prefs.tgCountry) ? B.prefs.tgCountry : "";
+
 	const visible = visibleTalkgroups();
 	const shown = visible.slice(0, 250);
 	P.tgRows.replaceChildren(...shown.map((row) => {
 		const [tgId, name, , cc] = row;
-		const chosen = B.prefs.contacts.some((c) => c.tg === tgId);
-		return h("tr", {},
-			h("td", { class: "grid-check" }, h("input", { type: "checkbox", checked: chosen, onchange: (event) => {
-				const at = B.prefs.contacts.findIndex((c) => c.tg === tgId);
-				if (event.target.checked && at < 0) B.prefs.contacts.push({ tg: tgId, name });
-				if (!event.target.checked && at >= 0) B.prefs.contacts.splice(at, 1);
-				changed();
-			} })),
+		const chosen = hasSource(model, `tg:${tgId}`);
+		return h("tr", { class: chosen ? "selected" : "" },
+			h("td", { class: "grid-check" }, h("input", {
+				type: "checkbox", checked: chosen, onchange: () => tickTalkgroup(tgId, name),
+			})),
 			h("td", { class: "c-num" }, String(tgId)),
 			h("td", {}, name),
 			h("td", {}, cc || dmr.CONTINENT_LABEL[row[2]] || ""));
 	}));
-	P.tgAll.checked = shown.length > 0 && shown.every((row) => B.prefs.contacts.some((c) => c.tg === row[0]));
-	P.tgAll.indeterminate = !P.tgAll.checked && shown.some((row) => B.prefs.contacts.some((c) => c.tg === row[0]));
+	const chosenShown = shown.filter((row) => hasSource(model, `tg:${row[0]}`));
+	P.tgAll.checked = shown.length > 0 && chosenShown.length === shown.length;
+	P.tgAll.indeterminate = chosenShown.length > 0 && chosenShown.length < shown.length;
 	P.tgStatus.textContent = visible.length
 		? t("editor.builder.tg_matched", { n: visible.length, shown: shown.length })
 		: t("editor.builder.tg_none");
-	P.tgCount.textContent = t("editor.builder.selected_n", { n: B.prefs.contacts.length });
-	P.tgChips.replaceChildren(...B.prefs.contacts.slice().sort((a, b) => a.tg - b.tg).map((contact) =>
-		h("li", {}, h("b", {}, String(contact.tg)), " ", contact.name,
-			h("button", { type: "button", "aria-label": t("editor.builder.remove", { name: contact.name }), onclick: () => {
-				B.prefs.contacts = B.prefs.contacts.filter((c) => c.tg !== contact.tg);
-				changed();
-			} }, "×"))));
-
-	P.snapshotNote.textContent = B.snapshot
-		? t("editor.builder.s3_snapshot", { dmr: B.snapshot.dmr, analog: B.snapshot.analog })
-		: "";
+	const chosenAll = (B.talkgroups || []).filter((row) => hasSource(model, `tg:${row[0]}`));
+	P.tgCount.textContent = t("editor.builder.selected_n", { n: chosenAll.length });
+	P.tgChips.replaceChildren(...chosenAll.map((row) => {
+		const removeButton = h("button", { type: "button", "aria-label": t("editor.builder.remove", { name: row[1] }) });
+		removeButton.textContent = "×";
+		removeButton.addEventListener("click", () => tickTalkgroup(row[0], row[1]));
+		return h("li", {}, h("b", {}, String(row[0])), " ", row[1], removeButton);
+	}));
 
 	// analog repeaters
 	const pool = [...(B.analogRepeaters || []), ...B.file];
@@ -672,15 +675,11 @@ function update() {
 	if (location) {
 		const near = analog.nearby(pool, location.lat, location.lon, B.prefs.radius, { band: B.prefs.band, limit: 300 });
 		for (const repeater of near) {
-			const key = analogKey(repeater);
-			const chosen = B.prefs.analog.includes(key);
-			analogRows.push(h("tr", {},
-				h("td", { class: "grid-check" }, h("input", { type: "checkbox", checked: chosen, onchange: (event) => {
-					const at = B.prefs.analog.indexOf(key);
-					if (event.target.checked && at < 0) B.prefs.analog.push(key);
-					if (!event.target.checked && at >= 0) B.prefs.analog.splice(at, 1);
-					changed();
-				} })),
+			const key = `analog:${analogKey(repeater)}`;
+			analogRows.push(h("tr", { class: hasSource(model, key) ? "selected" : "" },
+				h("td", { class: "grid-check" }, h("input", {
+					type: "checkbox", checked: hasSource(model, key), onchange: () => tickAnalog(repeater),
+				})),
 				h("td", {}, repeater.callsign),
 				h("td", { class: "c-num" }, `${geo.formatMHz(repeater.downlink_mhz * 1e6)} / ${geo.formatMHz(repeater.uplink_mhz * 1e6)}`),
 				h("td", {}, repeater.tx_tone || t("editor.builder.no_tone")),
@@ -699,104 +698,245 @@ function update() {
 			t("editor.builder.file_read", { n: B.fileReport.repeaters.length, name: B.fileReport.source })));
 	}
 
-	// simplex
+	P.snapshotNote.textContent = B.snapshot
+		? t("editor.builder.s3_snapshot", { dmr: B.snapshot.dmr, analog: B.snapshot.analog })
+		: "";
+
+	// simplex: the box adds the plan, the three buttons pick its contact
+	const simplexOn = hasSource(model, "simplex");
+	P.simplexOn.checked = simplexOn;
 	P.simplexChoice.replaceChildren(...dmr.CONTACTS.map((entry) => {
-		const pressed = B.prefs.simplex.choice === entry.id;
+		const pressed = simplexOn && B.prefs.simplex.choice === entry.id;
 		return h("button", { type: "button", class: "choice", "aria-pressed": String(pressed), onclick: () => {
-			B.prefs.simplex.choice = entry.id;
-			changed();
+			if (!simplexOn) {
+				B.prefs.simplex.choice = entry.id;
+				save();
+				tickSimplex();
+				return;
+			}
+			chooseSimplex(entry.id);
 		} }, h("strong", {}, entry.label), h("span", { class: "small muted" }, entry.help));
 	}));
-	P.simplexChoice.querySelectorAll(".choice").forEach((node, index) => {
-		node.setAttribute("aria-pressed", String(dmr.CONTACTS[index].id === B.prefs.simplex.choice));
-	});
-	P.simplexAccess.disabled = !B.prefs.simplex.enabled;
+	P.simplexAccess.checked = B.prefs.simplex.includeAccess;
+	P.simplexAccess.disabled = !simplexOn;
 	P.simplexChoice.querySelectorAll("button").forEach((node) => {
-		node.disabled = !B.prefs.simplex.enabled;
+		node.disabled = false;
 	});
 
-	// output
-	P.build.disabled = !location;
-	if (B.built) renderOutput();
 }
 
-function renderOutput() {
-	const { t } = B.api;
-	const result = B.built;
-	const body = [];
-	if (result.errors.length) {
-		body.push(h("p", { class: "rid-summary bad" }, t("editor.builder.not_added")));
-		body.push(h("ul", { class: "ed-builder-problems" },
-			...result.errors.map((error) => h("li", { class: "ed-err" }, error.message))));
-	} else {
-		body.push(h("p", { class: "rid-summary" }, t("editor.builder.added", {
-			channels: result.added.channels, contacts: result.added.contacts,
-			lists: result.added.rxLists, zones: result.added.zones,
-		})));
-	}
-	if (result.notes.length) {
-		body.push(h("ul", { class: "ed-builder-problems" }, ...result.notes.map((note) => h("li", {}, note.message))));
-	}
-	if (result.warnings.length) {
-		body.push(h("ul", { class: "ed-builder-problems" }, ...result.warnings.map((warning) => h("li", { class: "muted" }, warning.message))));
-	}
-	if (!result.errors.length) {
-		body.push(h("div", { class: "rid-row" }, button(t("editor.builder.go_channels"), () => B.api.show("channels"), { quiet: true })));
-	}
-	B.P.output.replaceChildren(...body);
-}
+// --- one tick, one change ---------------------------------------------------
 
-// --- building ---------------------------------------------------------------
-
-function run() {
-	const { api } = B;
-	const { t } = api;
-	const { location } = B.prefs;
-	if (!location) return api.say(t("editor.builder.bad_coords"), "bad");
-	// The repeater snapshot keeps talkgroup ids only (the names live once, in the
-	// talkgroup table), so they are filled in here for the contact names.
-	const dmrChosen = (B.dmrRepeaters || [])
-		.filter((repeater) => B.prefs.dmr.includes(repeater.id))
-		.map((repeater) => ({ ...repeater, talkgroups: repeaterTalkgroups(repeater) }));
-	const analogPool = [...(B.analogRepeaters || []), ...B.file];
-	const analogChosen = B.prefs.analog
-		.map((key) => analogPool.find((repeater) => analogKey(repeater) === key))
-		.filter(Boolean);
+// Run fn as one editor change. A source that cannot be added (the table is
+// full, or the plan does not load) is rolled back, so the box springs back.
+function applyChange(label, fn) {
 	let result = null;
-	const ok = api.change(t("editor.builder.undo"), () => {
-		result = applyPlan(api.model, {
-			location,
-			country: B.prefs.country,
-			region: B.prefs.region,
-			station: B.prefs.station,
-			packs: B.prefs.packs,
-			dmr: dmrChosen,
-			analog: analogChosen,
-			contacts: B.prefs.contacts,
-			dmrSimplex: { ...B.prefs.simplex, plan: "es" },
-			options: { ...B.prefs.options, aprsSsid: B.prefs.station.ssid },
-		});
-		if (!result.ok) return false;
-		const problems = validate(api.model).filter((problem) => problem.level === "error");
-		if (problems.length) {
-			result.errors.push(...problems.slice(0, 8).map((problem) => ({ code: problem.code, message: problemText(problem) })));
-			result.ok = false;
+	const errorsNow = () => validate(B.api.model).filter((problem) => problem.level === "error");
+	const before = errorsNow().length;
+	const ok = B.api.change(label, () => {
+		result = fn();
+		if (result && result.ok === false) return false;
+		// A codeplug may already have problems of its own; only new ones roll
+		// the tick back.
+		const problems = errorsNow();
+		if (problems.length > before) {
+			result = result || {};
+			result.errors = problems.slice(0, 4).map((problem) => problemText(problem));
 			return false;
 		}
 		return undefined;
 	});
-	B.built = result;
-	if (!ok) {
-		renderOutput();
-		return api.say(t("editor.builder.not_added_short"), "bad");
+	return { ok, result };
+}
+
+// The station fields are filled the first time something is added, so a build
+// has a radio name and a DMR ID without a separate press.
+function withStation(model) {
+	return applyStation(model, B.prefs.station);
+}
+
+function report(result, added, removed) {
+	const { t } = B.api;
+	const notes = result?.notes || [];
+	const warnings = result?.warnings || [];
+	const parts = [];
+	if (added.channels) parts.push(t("editor.builder.n_channels", { n: added.channels }));
+	if (added.contacts) parts.push(t("editor.builder.n_contacts", { n: added.contacts }));
+	if (added.rxLists) parts.push(t("editor.builder.n_lists", { n: added.rxLists }));
+	if (added.zones) parts.push(t("editor.builder.n_zones", { n: added.zones }));
+	if (added.aprs) parts.push(t("editor.builder.n_aprs", { n: added.aprs }));
+	const summary = parts.length ? parts.join(", ") : "";
+	if (summary) B.api.say(t("editor.builder.done_tick", { what: summary }), warnings.length ? "warn" : "ok");
+	else if (removed) B.api.say(t("editor.builder.removed_tick"), "info");
+	if (warnings.length) {
+		B.P.output.replaceChildren(h("ul", { class: "ed-builder-problems" },
+			...warnings.map((warning) => h("li", { class: "muted" }, warning.message))));
+	} else {
+		B.P.output.replaceChildren();
 	}
-	renderOutput();
-	const parts = [
-		result.added.channels ? t("editor.builder.n_channels", { n: result.added.channels }) : null,
-		result.added.contacts ? t("editor.builder.n_contacts", { n: result.added.contacts }) : null,
-		result.added.zones ? t("editor.builder.n_zones", { n: result.added.zones }) : null,
-	].filter(Boolean);
-	api.say(t("editor.builder.done", { what: parts.join(", ") }), result.warnings.length ? "warn" : "ok");
+	B.lastNotes = notes;
+}
+
+// A tick adds; the tick that follows removes. Both go through the ledger, so
+// only what this source added is taken away.
+function tick(addFn, key, label) {
+	const model = B.api.model;
+	if (hasSource(model, key)) {
+		const { ok } = applyChange(label, () => {
+			removeSource(model, key);
+			return { ok: true };
+		});
+		if (ok) {
+			B.api.say(B.api.t("editor.builder.removed_tick"), "info");
+			B.P.output.replaceChildren();
+		}
+		return;
+	}
+	if (!roomFor(model, key)) return;
+	const { ok, result } = applyChange(label, () => {
+		withStation(model);
+		return addFn(model);
+	});
+	if (ok) report(result, result?.receipt ? countOf(result.receipt) : {}, false);
+}
+
+const countOf = (receipt) => ({
+	channels: receipt.channels.length,
+	contacts: receipt.contacts.length,
+	rxLists: receipt.rxLists.length,
+	zones: receipt.zones.length,
+	aprs: receipt.aprs.length,
+});
+
+// The tables have fixed sizes; a tick that would overflow one is refused before
+// the change, with a line saying which.
+function roomFor(model, key) {
+	const { t } = B.api;
+	const checks = [
+		["channels", LIMITS.channels],
+		["contacts", LIMITS.contacts],
+		["zones", LIMITS.zones],
+		["rxLists", LIMITS.rxLists],
+	];
+	for (const [table, max] of checks) {
+		if (model[table].length >= max) {
+			B.api.say(t("editor.builder.limit", { table: t(`editor.tab.${table}`), max }), "bad");
+			return false;
+		}
+	}
+	return true;
+}
+
+function tickRepeater(repeater, on) {
+	const key = `dmr:${repeater.id}`;
+	tick((model) => addRepeater(model, { ...repeater, talkgroups: repeaterTalkgroups(repeater) },
+		{ key, fallbackTg: B.prefs.options.fallbackTg }), key, B.api.t("editor.builder.tick_repeater", { call: repeater.callsign }));
+	void on;
+}
+
+function tickAnalog(repeater) {
+	const key = `analog:${analogKey(repeater)}`;
+	tick((model) => addAnalog(model, repeater, { key }), key, B.api.t("editor.builder.tick_analog", { call: repeater.callsign }));
+}
+
+function tickPack(pack, on) {
+	const key = `pack:${pack.id}`;
+	tick((model) => {
+		const result = addPack(model, pack.id, { region: B.prefs.region, country: B.prefs.country });
+		// The APRS position rides with the APRS pack: it needs that channel.
+		if (on && pack.id.startsWith("aprs_") && B.prefs.options.aprsConfig) {
+			const aprs = addAprs(model, {
+				location: B.prefs.location,
+				callsign: B.prefs.station.callsign,
+				ssid: B.prefs.station.ssid,
+				country: B.prefs.country,
+			});
+			result.notes = [...result.notes, ...aprs.notes];
+			result.warnings = [...result.warnings, ...aprs.warnings];
+		}
+		return result;
+	}, key, B.api.t("editor.builder.tick_pack", { name: pack.title }));
+}
+
+function tickTalkgroup(tg, name) {
+	const key = `tg:${tg}`;
+	tick((model) => addTalkgroup(model, { tg, name }, { key }), key, B.api.t("editor.builder.tick_tg", { tg }));
+}
+
+function tickSimplex() {
+	const key = "simplex";
+	tick((model) => addSimplex(model, {
+		plan: "es",
+		choice: B.prefs.simplex.choice,
+		includeAccess: B.prefs.simplex.includeAccess,
+		country: B.prefs.country,
+	}), key, B.api.t("editor.builder.tick_simplex"));
+}
+
+function tickAprs() {
+	const key = "aprs";
+	if (hasSource(B.api.model, key)) {
+		applyChange(B.api.t("editor.builder.tick_aprs"), () => {
+			removeSource(B.api.model, key);
+			return { ok: true };
+		});
+		return;
+	}
+	if (!B.prefs.location || !B.prefs.station.callsign) {
+		return B.api.say(B.api.t("editor.builder.aprs_needs"), "bad");
+	}
+	const { ok, result } = applyChange(B.api.t("editor.builder.tick_aprs"), () => addAprs(B.api.model, {
+		location: B.prefs.location,
+		callsign: B.prefs.station.callsign,
+		ssid: B.prefs.station.ssid,
+		country: B.prefs.country,
+	}));
+	if (ok) report(result, { aprs: 1 }, false);
+	else if (result?.warnings.length) report(result, {}, false);
+}
+
+// Change of the simplex contact (TG 99, AllCall or both): take the old set out
+// and put the new one in, in one change, so one Undo goes back to the old one.
+function chooseSimplex(choice) {
+	B.prefs.simplex.choice = choice;
+	save();
+	if (!hasSource(B.api.model, "simplex")) return update();
+	const { ok, result } = applyChange(B.api.t("editor.builder.tick_simplex"), () => {
+		removeSource(B.api.model, "simplex");
+		return addSimplex(B.api.model, {
+			plan: "es",
+			choice,
+			includeAccess: B.prefs.simplex.includeAccess,
+			country: B.prefs.country,
+		});
+	});
+	if (ok && result?.receipt) report(result, countOf(result.receipt), false);
+}
+
+function clearAll() {
+	const model = B.api.model;
+	const keys = sourceKeys(model);
+	if (!keys.length) return;
+	applyChange(B.api.t("editor.builder.clear"), () => {
+		for (const key of keys) removeSource(model, key);
+		return { ok: true };
+	});
+	B.api.say(B.api.t("editor.builder.cleared", { n: keys.length }), "info");
+}
+
+// The station fields set the codeplug's own name and DMR ID once, if empty.
+function applyStationFields() {
+	const model = B.api.model;
+	const station = B.prefs.station;
+	save();
+	const emptyName = !model.general.radioName && asciiName(station.callsign, "");
+	const emptyId = !model.general.dmrId && Number(station.dmrId) > 0;
+	if (!emptyName && !emptyId) return;
+	const { result } = applyChange(B.api.t("editor.builder.station_change"), () => {
+		const applied = applyStation(model, station);
+		return { ok: true, warnings: applied.warnings, notes: applied.notes };
+	});
+	if (result?.notes?.length) B.api.say(result.notes.map((note) => note.message).join(" "), "ok");
 }
 
 export { B as builderState };

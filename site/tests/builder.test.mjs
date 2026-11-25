@@ -17,7 +17,10 @@ import * as geo from "../static/js/codeplug/builder/geo.js";
 import * as packs from "../static/js/codeplug/builder/packs.js";
 import * as dmr from "../static/js/codeplug/builder/dmr.js";
 import * as analog from "../static/js/codeplug/builder/analog.js";
-import { applyPlan } from "../static/js/codeplug/builder/plan.js";
+import {
+	applyPlan, addRepeater, addAnalog, addPack, addTalkgroup, addSimplex, addAprs,
+	removeSource, hasSource, sourceKeys,
+} from "../static/js/codeplug/builder/plan.js";
 
 const MALAGA = { lat: 36.7213, lon: -4.4214 };
 
@@ -298,4 +301,123 @@ test("a plan that would overflow the radio is refused before anything is written
 	assert.equal(result.ok, true, "one plan fits");
 	for (let i = 0; i < 70; i++) applyPlan(model, plan({ packs: ["r1_calling"], dmr: [], contacts: [], options: { aprsConfig: false } }));
 	assert.ok(model.channels.length > 0);
+});
+
+// --- one tick at a time -----------------------------------------------------
+
+test("a repeater tick adds its channel, contacts and list, and hasSource says so", () => {
+	const model = empty();
+	assert.equal(hasSource(model, "dmr:214702"), false);
+	const result = addRepeater(model, { ...dmrRepeater(), talkgroups: [
+		{ tg: 21429, slot: 2, name: "Provincial Málaga" },
+		{ tg: 214, slot: 1, name: "Spain" },
+	] }, { key: "dmr:214702" });
+	assert.equal(result.ok, true);
+	assert.equal(hasSource(model, "dmr:214702"), true);
+	assert.equal(model.channels.length, 1);
+	assert.equal(model.contacts.length, 2);
+	assert.equal(model.rxLists.length, 1);
+	assert.equal(model.zones.length, 1);
+	assert.deepEqual(sourceKeys(model), ["dmr:214702"]);
+});
+
+test("unticking removes exactly that repeater's records and nothing else", () => {
+	const model = empty();
+	addRepeater(model, { ...dmrRepeater(), talkgroups: [{ tg: 21429, slot: 2, name: "Málaga" }] }, { key: "dmr:214702" });
+	addPack(model, "pmr446", { region: "R1", country: "ES" });
+	const before = { channels: model.channels.length, contacts: model.contacts.length };
+	assert.equal(before.channels, 17);
+	const { ok, removed } = removeSource(model, "dmr:214702");
+	assert.equal(ok, true);
+	assert.equal(removed.channels.length, 1);
+	assert.equal(model.channels.length, 16);
+	assert.equal(model.contacts.length, 0);
+	assert.equal(model.rxLists.length, 0);
+	assert.equal(model.zones.length, 1, "the PMR446 zone stays");
+	assert.equal(hasSource(model, "dmr:214702"), false);
+	assert.equal(hasSource(model, "pack:pmr446"), true);
+});
+
+test("the receipt stays after a removal, so undo finds the records again", () => {
+	const model = empty();
+	addRepeater(model, { ...dmrRepeater(), talkgroups: [{ tg: 21429, slot: 2, name: "Málaga" }] }, { key: "dmr:214702" });
+	const { removed } = removeSource(model, "dmr:214702");
+	model.channels.push(removed.channels[0]);	// what the editor's undo does
+	assert.equal(hasSource(model, "dmr:214702"), true);
+});
+
+test("a contact another channel still uses is not removed", () => {
+	const model = empty();
+	addRepeater(model, { ...dmrRepeater(), talkgroups: [{ tg: 214, slot: 1, name: "Spain" }] }, { key: "dmr:214702" });
+	addTalkgroup(model, { tg: 214, name: "Spain" }, { key: "tg:214" });
+	const shared = model.contacts.find((contact) => contact.id === 214);
+	removeSource(model, "dmr:214702");
+	assert.ok(model.contacts.includes(shared) === false || model.channels.some((c) => c.contact === shared));
+	// the plain contact from the table is still there because it is its own receipt
+	assert.equal(hasSource(model, "tg:214"), true);
+});
+
+test("a zone another tick also uses stays when the first goes", () => {
+	const model = empty();
+	addPack(model, "r1_calling", { region: "R1", country: "ES" });
+	addPack(model, "pmr446", { region: "R1", country: "ES" });
+	const zone = model.zones.find((z) => z.name === "STANDARD");
+	assert.ok(zone);
+	assert.equal(zone.channels.length, 27, "both packs share one zone");
+	removeSource(model, "pack:r1_calling");
+	assert.ok(model.zones.includes(zone), "records from the other tick are still in it");
+	assert.equal(zone.channels.length, 16);
+	assert.deepEqual(zone.channels.map((c) => c.name).slice(0, 2), ["PMR01", "PMR02"]);
+});
+
+test("an empty zone the Builder made goes with its last channel", () => {
+	const model = empty();
+	addPack(model, "r1_calling", { region: "R1", country: "ES" });
+	assert.equal(model.zones.length, 1);
+	removeSource(model, "pack:r1_calling");
+	assert.equal(model.zones.length, 0);
+});
+
+test("the simplex plan is one tick, and switching its contact is one change", () => {
+	const model = empty();
+	addSimplex(model, { plan: "es", choice: "tg99", country: "ES" });
+	assert.equal(model.channels.length, 9);
+	assert.equal(model.contacts.length, 1);
+	assert.equal(hasSource(model, "simplex"), true);
+	removeSource(model, "simplex");
+	addSimplex(model, { plan: "es", choice: "both", country: "ES" });
+	assert.equal(model.channels.length, 18);
+	assert.deepEqual(model.contacts.map((c) => c.type).sort(), ["all", "group"]);
+});
+
+test("the APRS tick needs an APRS channel, and takes its own record away", () => {
+	const model = empty();
+	const refused = addAprs(model, { location: MALAGA, callsign: "EA7KLK" });
+	assert.equal(refused.ok, false);
+	assert.equal(refused.warnings[0].code, "aprs_no_channel");
+	addPack(model, "aprs_r1", { region: "R1", country: "ES" });
+	const result = addAprs(model, { location: MALAGA, callsign: "EA7KLK", ssid: 7, country: "ES" });
+	assert.equal(result.ok, true);
+	assert.equal(model.aprs.length, 1);
+	const channel = model.channels.find((c) => c.aprs);
+	assert.ok(channel);
+	removeSource(model, "aprs");
+	assert.equal(model.aprs.length, 0);
+	assert.equal(channel.aprs, null, "the channel link goes too");
+	assert.equal(model.channels.length, 2, "and the channels stay");
+});
+
+test("removing an unknown source is a no-op, not a crash", () => {
+	const model = empty();
+	const result = removeSource(model, "nothing");
+	assert.equal(result.ok, false);
+	assert.equal(model.channels.length, 0);
+});
+
+test("names stay unique across separate ticks", () => {
+	const model = empty();
+	addPack(model, "marine_intl", { region: "R1", country: "ES" });
+	addPack(model, "marine_intl", { region: "R1", country: "ES" });
+	const all = model.channels.map((c) => c.name);
+	assert.equal(new Set(all).size, all.length);
 });

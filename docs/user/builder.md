@@ -5,8 +5,13 @@
 
 The **Builder** tab fills a codeplug from a location: standard analog channels,
 the DMR repeater you can hear, the talkgroups you use, and analog repeaters.
-It adds to the codeplug you have open — nothing is replaced — and the whole
-build is one change, so **Undo** takes it out again in one step.
+
+**Every tick changes the codeplug immediately.** Tick a repeater and its channel,
+contacts and RX group list appear in their tabs at once; tick a pack and its
+channels are there. **Every tick is its own step**, so *Undo* takes back exactly
+that one — the repeater you just added, or the pack, not the whole session.
+Unticking a box removes what that tick added and keeps anything else still using
+the same contact or zone.
 
 Everything happens in the page. Your choices are kept in this browser only.
 
@@ -134,16 +139,31 @@ The callsign becomes the radio name and the APRS source, and the DMR ID goes int
 the codeplug's radio settings — **but only where those fields are still empty**.
 A name or ID already in the codeplug is never overwritten; the panel says so.
 
-## After the build
+## What each tick does
 
-The panel lists what was added, then any warnings: names shortened to the
-radio's 16 characters, a talkgroup list cut at 32 entries, a repeater with no
-tone. Nothing that changes a frequency, a tone or a contact happens without a
-line there.
+| Tick | Adds, at once |
+|---|---|
+| A DMR repeater | one channel, one contact per static talkgroup, one RX group list |
+| A channel pack | its channels, in the `STANDARD` zone (an APRS pack also adds the position if one is set) |
+| A talkgroup row | one group-call contact, no timeslot override |
+| An analog repeater | one FM channel with its shift and tone, in `ANALOG` |
+| The simplex box | its channels and the TG 99 / AllCall contacts; the three buttons switch the contact |
+| The APRS box | the fixed position and its link to the APRS channel |
 
-Then carry on as usual: the **Channels**, **Contacts** and **Zones** tabs show
-what arrived, **Problems** validates it, and **Save** or **Write to Radio** sends
-it.
+Each of those is one line in the change history, so Undo moves one tick at a
+time. Unticking removes exactly that tick's records: a contact another channel
+still uses stays, and a zone another source filled stays.
+
+**Remove everything the Builder added** takes all of it out in one change.
+
+Warnings — a name shortened to the radio's 16 characters, a talkgroup list cut
+at 32 entries, a repeater with no tone — appear under the tab as the tick
+happens. A tick that would overflow a table (1024 channels, 68 zones) is refused
+before it changes anything, with a line saying which table is full.
+
+The **Channels**, **Contacts** and **Zones** tabs show the records as they
+arrive, **Problems** validates them, and **Save** or **Write to Radio** sends the
+codeplug on.
 
 ## Where the data comes from
 
